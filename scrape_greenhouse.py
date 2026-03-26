@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Scrape salary ranges from Anthropic's Greenhouse job board and export to CSV.
+Scrape salary ranges from any Greenhouse job board and export to CSV.
 
 Usage:
-  python scrape_anthropic.py --out anthropic_salaries.csv
+  python scrape_greenhouse.py --company anthropic
+  python scrape_greenhouse.py --company anthropic --out anthropic_salaries.csv
 """
 
 from __future__ import annotations
@@ -31,9 +32,6 @@ from classify import (
 )
 
 
-BOARD = "anthropic"
-BASE_URL = f"https://boards-api.greenhouse.io/v1/boards/{BOARD}/jobs"
-
 
 def _html_to_markdown(content_html: str) -> str:
     """Convert Greenhouse job HTML to clean markdown."""
@@ -50,13 +48,14 @@ def _html_to_markdown(content_html: str) -> str:
     return md
 
 
-def greenhouse_job_url(job_id: int) -> str:
-    return f"https://job-boards.greenhouse.io/{BOARD}/jobs/{job_id}"
+def greenhouse_job_url(company: str, job_id: int) -> str:
+    return f"https://job-boards.greenhouse.io/{company}/jobs/{job_id}"
 
 
-def scrape_all_jobs() -> List[Dict[str, Any]]:
-    log.info("Fetching all jobs from Greenhouse boards API ...")
-    resp = requests.get(BASE_URL, params={"content": "true"}, timeout=30)
+def scrape_all_jobs(company: str) -> List[Dict[str, Any]]:
+    url = f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs"
+    log.info("Fetching all jobs from Greenhouse API for %s ...", company)
+    resp = requests.get(url, params={"content": "true"}, timeout=30)
     resp.raise_for_status()
     jobs = resp.json().get("jobs", [])
     log.info("Fetched %d jobs", len(jobs))
@@ -65,10 +64,13 @@ def scrape_all_jobs() -> List[Dict[str, Any]]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="anthropic_salaries.csv")
+    ap.add_argument("--company", required=True, help="Greenhouse company slug (e.g. anthropic)")
+    ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    jobs = scrape_all_jobs()
+    out_path = args.out or f"{args.company}_salaries.csv"
+
+    jobs = scrape_all_jobs(args.company)
 
     fieldnames = [
         "job_id",
@@ -106,7 +108,7 @@ def main() -> None:
                 "job_id": job_id,
                 "title": title,
                 "location": location,
-                "url": greenhouse_job_url(job_id),
+                "url": greenhouse_job_url(args.company, job_id),
                 "updated_at": updated_at,
                 "salary_text": parsed.salary_text,
                 "currency": parsed.currency,
@@ -121,14 +123,14 @@ def main() -> None:
             }
         )
 
-    with open(args.out, "w", newline="", encoding="utf-8") as f:
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         w.writerows(rows)
 
     with_salary = sum(1 for r in rows if r["salary_min"] is not None and r["salary_max"] is not None)
     log.info("Parsed salary ranges for %d / %d jobs", with_salary, len(rows))
-    log.info("Wrote %s", args.out)
+    log.info("Wrote %s", out_path)
 
 
 if __name__ == "__main__":
