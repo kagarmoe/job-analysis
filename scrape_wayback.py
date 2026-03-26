@@ -1,5 +1,7 @@
 """
-Scrape historical Anthropic job postings from the Wayback Machine.
+Scrape historical job postings from the Wayback Machine.
+
+Supports Greenhouse and Ashby job boards for any company.
 
 Strategy (optimized to minimize requests):
 1. Query CDX API for all archived individual job page URLs — this gives us every
@@ -10,6 +12,7 @@ Strategy (optimized to minimize requests):
    to determine which jobs are closed.
 """
 
+import argparse
 import csv
 import json
 import logging
@@ -28,14 +31,6 @@ log = logging.getLogger(__name__)
 
 CDX_URL = "https://web.archive.org/cdx/search/cdx"
 WEB_URL = "https://web.archive.org/web"
-
-JOB_URL_PATTERNS = [
-    "boards.greenhouse.io/anthropic/jobs/*",
-    "job-boards.greenhouse.io/anthropic/jobs/*",
-]
-
-OUTPUT_CSV = Path("anthropic_salaries_historical.csv")
-PROGRESS_FILE = Path(".wayback_progress.json")
 
 REQUEST_DELAY = 2.5  # seconds between page fetches
 MAX_RETRIES = 5
@@ -71,7 +66,7 @@ def _build_session() -> requests.Session:
     session.mount("https://", adapter)
     session.mount("http://", adapter)
     session.headers.update({
-        "User-Agent": "AnthropicSalaryResearch/1.0 (academic research)",
+        "User-Agent": "JobBoardResearch/1.0 (academic research)",
         "Accept": "text/html,application/json",
     })
     return session
@@ -155,6 +150,41 @@ def parse_job_page(html: str) -> dict:
     return result
 
 
+def parse_ashby_page(html_text: str) -> dict:
+    """Parse an Ashby job page for details (React SPA, try JSON-LD first)."""
+    result = {
+        "title": "", "location": "", "department": "",
+        "salary_text": "", "salary_min": None, "salary_max": None,
+        "currency": "", "salary_unit": "",
+    }
+    soup = BeautifulSoup(html_text, "html.parser")
+
+    # Try JSON-LD first (structured data, most reliable)
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string)
+            if data.get("@type") == "JobPosting":
+                result["title"] = data.get("title", "")
+                loc = data.get("jobLocation", {})
+                if isinstance(loc, dict):
+                    addr = loc.get("address", {})
+                    result["location"] = f"{addr.get('addressLocality', '')}, {addr.get('addressRegion', '')}"
+                break
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+    # Fall back to HTML text for salary
+    text = soup.get_text(" ", strip=True)
+    m = re.search(r"Compensation will be[^.]*\$[^.]+\.", text, re.I)
+    if m:
+        result["salary_text"] = m.group(0)
+
+    if result["salary_text"]:
+        _parse_salary_numbers(result)
+
+    return result
+
+
 def _parse_salary_numbers(result: dict) -> None:
     text = result["salary_text"]
 
@@ -192,17 +222,17 @@ def _parse_salary_numbers(result: dict) -> None:
         result["salary_max"] = int(m2.group(2).replace(".", ""))
 
 
-def load_progress() -> dict:
-    if PROGRESS_FILE.exists():
-        return json.loads(PROGRESS_FILE.read_text())
+def load_progress(progress_file: Path) -> dict:
+    if progress_file.exists():
+        return json.loads(progress_file.read_text())
     return {"fetched_jobs": {}, "job_index": None}
 
 
-def save_progress(state: dict) -> None:
-    PROGRESS_FILE.write_text(json.dumps(state, default=str))
+def save_progress(state: dict, progress_file: Path) -> None:
+    progress_file.write_text(json.dumps(state, default=str))
 
 
-def step1_build_job_index() -> dict[str, dict]:
+def step1_build_job_index(job_url_patterns: list[str], board: str) -> dict[str, dict]:
     """
     Query CDX for all archived individual job page URLs.
     Returns: {job_id: {"url": clean_url, "first_seen": ts, "last_seen": ts}}
@@ -211,13 +241,19 @@ def step1_build_job_index() -> dict[str, dict]:
     log.info("Step 1: Building job index from CDX (no page fetches)...")
     job_index: dict[str, dict] = {}
 
-    for pattern in JOB_URL_PATTERNS:
+    for pattern in job_url_patterns:
         log.info("  Querying CDX for %s", pattern)
         results = cdx_query(pattern, filter="statuscode:200")
         log.info("  Found %d archived page hits", len(results))
 
         for row in results:
-            m = re.search(r"/jobs/(\d+)", row["original"])
+            if board == "greenhouse":
+                m = re.search(r"/jobs/(\d+)", row["original"])
+            elif board == "ashby":
+                m = re.search(r"/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", row["original"])
+            else:
+                m = None
+
             if not m:
                 continue
             jid = m.group(1)
@@ -245,6 +281,8 @@ def step1_build_job_index() -> dict[str, dict]:
 def step2_fetch_job_details(
     job_index: dict[str, dict],
     progress: dict,
+    board: str,
+    progress_file: Path,
 ) -> list[JobRecord]:
     """Fetch one snapshot per job to extract details."""
     fetched: dict = progress.get("fetched_jobs", {})
@@ -273,7 +311,13 @@ def step2_fetch_job_details(
         rec = JobRecord(job_id=jid, first_seen=idx["first_seen"], last_seen=idx["last_seen"])
 
         if html:
-            details = parse_job_page(html)
+            if board == "greenhouse":
+                details = parse_job_page(html)
+            elif board == "ashby":
+                details = parse_ashby_page(html)
+            else:
+                details = parse_job_page(html)
+
             rec.title = details["title"]
             rec.location = details["location"]
             rec.department = details["department"]
@@ -298,14 +342,14 @@ def step2_fetch_job_details(
         }
         if (i + 1) % 10 == 0:
             progress["fetched_jobs"] = fetched
-            save_progress(progress)
+            save_progress(progress, progress_file)
             log.info("    Progress saved (%d/%d)", i + 1, len(to_fetch))
 
         time.sleep(REQUEST_DELAY)
 
     # Final save
     progress["fetched_jobs"] = fetched
-    save_progress(progress)
+    save_progress(progress, progress_file)
 
     return records
 
@@ -349,25 +393,45 @@ def write_csv(records: list[JobRecord], path: Path) -> None:
 
 
 def main():
-    progress = load_progress()
+    ap = argparse.ArgumentParser(description="Scrape historical job postings from the Wayback Machine")
+    ap.add_argument("--board", required=True, choices=["greenhouse", "ashby"])
+    ap.add_argument("--company", required=True, help="Company slug")
+    ap.add_argument("--out", default=None, help="Output CSV path")
+    args = ap.parse_args()
+
+    out_path = Path(args.out or f"{args.company}_salaries_historical.csv")
+    current_csv = Path(f"{args.company}_salaries.csv")
+    progress_file = Path(f".wayback_progress_{args.company}.json")
+
+    if args.board == "greenhouse":
+        job_url_patterns = [
+            f"boards.greenhouse.io/{args.company}/jobs/*",
+            f"job-boards.greenhouse.io/{args.company}/jobs/*",
+        ]
+    elif args.board == "ashby":
+        job_url_patterns = [
+            f"jobs.ashbyhq.com/{args.company}/*",
+        ]
+
+    progress = load_progress(progress_file)
 
     # Step 1: Build index from CDX (fast, no page fetches)
     if progress.get("job_index"):
         job_index = progress["job_index"]
         log.info("Loaded job index from progress: %d jobs", len(job_index))
     else:
-        job_index = step1_build_job_index()
+        job_index = step1_build_job_index(job_url_patterns, args.board)
         progress["job_index"] = job_index
-        save_progress(progress)
+        save_progress(progress, progress_file)
 
     # Step 2: Fetch individual job details (resumable)
-    records = step2_fetch_job_details(job_index, progress)
+    records = step2_fetch_job_details(job_index, progress, args.board, progress_file)
 
     # Mark active vs closed
-    mark_active_jobs(records, Path("anthropic_salaries.csv"))
+    mark_active_jobs(records, current_csv)
 
     # Write output
-    write_csv(records, OUTPUT_CSV)
+    write_csv(records, out_path)
 
     # Summary
     total = len(records)
