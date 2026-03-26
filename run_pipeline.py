@@ -92,14 +92,21 @@ def run_wayback(board: str, company: str) -> Path | None:
 
 
 def inject_notebook_config(notebook_path: str, replacements: dict) -> str:
-    """Inject config values into a notebook's first code cell. Returns temp path."""
+    """Inject config values into a notebook's first code cell via regex. Returns temp path."""
     nb = json.loads(Path(notebook_path).read_text())
 
     for cell in nb["cells"]:
         if cell["cell_type"] == "code":
             source = cell["source"] if isinstance(cell["source"], str) else "".join(cell["source"])
-            for old, new in replacements.items():
-                source = source.replace(old, new)
+            for var_name, value in replacements.items():
+                # Replace any existing value for this variable: VAR = "..." -> VAR = "new"
+                source = re.sub(
+                    rf'^({re.escape(var_name)}\s*=\s*)"[^"]*"',
+                    rf'\1"{value}"',
+                    source,
+                    count=1,
+                    flags=re.MULTILINE,
+                )
             cell["source"] = source
             break  # only modify first code cell
 
@@ -172,20 +179,20 @@ def main():
 
     # Salary analysis
     tmp = inject_notebook_config("analyze_salaries.ipynb", {
-        'CSV_PATH = "anthropic_salaries.csv"': f'CSV_PATH = "{csv_path}"',
+        "CSV_PATH": str(csv_path),
     })
     results.append(("Salary Analysis", run_notebook(tmp, "Salary Analysis")))
 
     # NLP analysis
     tmp = inject_notebook_config("analyze_nlp.ipynb", {
-        'CSV_PATH = "anthropic_salaries.csv"': f'CSV_PATH = "{csv_path}"',
+        "CSV_PATH": str(csv_path),
     })
     results.append(("NLP Analysis", run_notebook(tmp, "NLP Analysis")))
 
     # Historical analysis
     if hist_path:
         tmp = inject_notebook_config("analyze_historical.ipynb", {
-            'CSV_PATH = "anthropic_salaries_historical.csv"': f'CSV_PATH = "{hist_path}"',
+            "CSV_PATH": str(hist_path),
         })
         results.append(("Historical Analysis", run_notebook(tmp, "Historical Analysis")))
     else:
@@ -193,8 +200,8 @@ def main():
 
     # Role gap analysis
     tmp = inject_notebook_config("analyze_role_gap.ipynb", {
-        'JOB_ID = "2689707b-7314-4246-ac95-1e6466970ba3"': f'JOB_ID = "{job_id}"',
-        'CSV_PATH = "crusoe_salaries.csv"': f'CSV_PATH = "{csv_path}"',
+        "JOB_ID": job_id,
+        "CSV_PATH": str(csv_path),
     })
     results.append(("Role Gap Analysis", run_notebook(tmp, "Role Gap Analysis")))
 
