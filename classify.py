@@ -118,6 +118,30 @@ SENIORITY_ORDER = [
     "Staff / Principal", "Lead", "Manager", "Director+",
 ]
 
+# Normalized department taxonomy — maps company-specific departments to ~9 common buckets.
+# Rules are ordered most-specific-first; first regex match wins.
+NORMALIZED_DEPARTMENT_RULES = [
+    ("Research",        r"\bresearch\b"),
+    ("Engineering",     r"\bengineering\b|\bsoftware\b|\bhardware\b|\binfrastructure\b"),
+    ("Product & Design", r"\bproduct\b|\bdesign\b"),
+    ("People",          r"\bpeople\b|\brecruit|\bHR\b|\bhuman resources\b"),
+    ("Finance & Legal", r"\bfinance\b|\blegal\b|\baccounting\b|\bcounsel\b"),
+    ("Sales & BD",      r"\bsales\b|\bbusiness development\b|\b[BS]DR\b|\bBD\b"),
+    ("Marketing & Comms", r"\bmarketing\b|\bbrand\b|\bcommunication"),
+    ("Security & IT",   r"\bsecurity\b|\bsafeguard|\bIT\b|\bcompliance\b"),
+    ("Operations & Other", r".*"),  # catch-all
+]
+
+
+def normalize_department(department_raw: str) -> str:
+    """Map a company-specific department name to a normalized ~9-bucket taxonomy."""
+    if not isinstance(department_raw, str) or not department_raw:
+        return "Operations & Other"
+    for bucket, pattern in NORMALIZED_DEPARTMENT_RULES:
+        if re.search(pattern, department_raw, re.I):
+            return bucket
+    return "Operations & Other"
+
 
 def classify_department(title: str) -> str:
     if not isinstance(title, str):
