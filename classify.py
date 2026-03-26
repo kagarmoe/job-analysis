@@ -194,14 +194,15 @@ def add_usd_salary(df):
 # ---------------------------------------------------------------------------
 
 # Compile once at import time.
-DASH_PATTERN = r"(?:\u2013|\u2014|-|–|—|\s+to\s+)"
+DASH_PATTERN = r"(?:\u2013|\u2014|-|–|—|\s+to\s+|\s+and\s+)"
 CURRENCY_SYM_1 = r"(?P<sym1>\$|£|€)"
 CURRENCY_SYM_2 = r"(?P<sym2>\$|£|€)"
 NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d+)"
+UNIT_SUFFIX = r"(?:/\w+)?"  # optional e.g. /hr, /yr
 
 SALARY_RANGE_RE = re.compile(
-    rf"{CURRENCY_SYM_1}\s*(?P<min>{NUMBER})\s*{DASH_PATTERN}\s*"
-    rf"(?:{CURRENCY_SYM_2}\s*)?(?P<max>{NUMBER})"
+    rf"{CURRENCY_SYM_1}\s*(?P<min>{NUMBER}){UNIT_SUFFIX}\s*{DASH_PATTERN}\s*"
+    rf"(?:{CURRENCY_SYM_2}\s*)?(?P<max>{NUMBER}){UNIT_SUFFIX}"
 )
 
 
@@ -227,6 +228,12 @@ def looks_like_salary_text(text: str) -> bool:
     return bool(re.search(r"\b(USD|EUR|GBP|CAD|AUD)\b", text))
 
 
+COMPENSATION_SENTENCE_RE = re.compile(
+    r"Compensation will be[^.]*\$[^.]+\.",
+    re.I,
+)
+
+
 def extract_salary_block_from_html(content_html: str) -> Optional[str]:
     """
     Find a salary-ish block from the job HTML content. Returns normalized text or None.
@@ -235,6 +242,12 @@ def extract_salary_block_from_html(content_html: str) -> Optional[str]:
         return None
 
     soup = BeautifulSoup(html.unescape(content_html), "html.parser")
+
+    # Fast path: match "Compensation will be paid in the range of $X - $Y" directly
+    plain = normalize_whitespace(soup.get_text(" ", strip=True))
+    m = COMPENSATION_SENTENCE_RE.search(plain)
+    if m:
+        return m.group(0)
 
     heading_patterns = [
         re.compile(r"\bAnnual Salary\b", re.I),
@@ -295,10 +308,12 @@ def parse_salary_text(block: str) -> SalaryParseResult:
     unit = None
     if re.search(r"\bAnnual\b|\bper year\b|\byearly\b", block, re.I):
         unit = "annual"
-    elif re.search(r"\bhour\b|\bhourly\b|\bper hour\b", block, re.I):
+    elif re.search(r"\bhour\b|\bhourly\b|\bper hour\b|/hr\b", block, re.I):
         unit = "hourly"
     elif re.search(r"\bmonth\b|\bmonthly\b|\bper month\b", block, re.I):
         unit = "monthly"
+    elif re.search(r"\bweek\b|\bweekly\b|\bper week\b", block, re.I):
+        unit = "weekly"
 
     # currency code
     currency = None
@@ -325,5 +340,13 @@ def parse_salary_text(block: str) -> SalaryParseResult:
         if not currency and m2.group(3):
             currency = m2.group(3)
         return SalaryParseResult(block, currency, min_val, max_val, unit)
+
+    # single amount fallback: "$1,415/per week"
+    m3 = re.search(r"(?P<sym>\$|£|€)\s*(?P<val>\d{1,3}(?:,\d{3})+|\d+)", block)
+    if m3:
+        val = int(m3.group("val").replace(",", ""))
+        if not currency:
+            currency = {"$": "USD", "€": "EUR", "£": "GBP"}.get(m3.group("sym"))
+        return SalaryParseResult(block, currency, val, val, unit)
 
     return SalaryParseResult(block, currency, None, None, unit)
