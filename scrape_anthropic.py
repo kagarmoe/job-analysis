@@ -27,6 +27,7 @@ import requests
 
 from classify import (
     SalaryParseResult, extract_salary_block_from_html, parse_salary_text,
+    classify_department, classify_seniority, classify_work_mode, normalize_department,
 )
 
 
@@ -80,6 +81,10 @@ def main() -> None:
         "salary_min",
         "salary_max",
         "salary_unit",
+        "department_raw",
+        "department",
+        "seniority",
+        "work_mode",
         "description_md",
     ]
 
@@ -94,6 +99,7 @@ def main() -> None:
         salary_block = extract_salary_block_from_html(content_html or "")
         parsed = parse_salary_text(salary_block) if salary_block else SalaryParseResult("", None, None, None, None)
         description_md = _html_to_markdown(content_html or "")
+        department_raw = classify_department(title)
 
         rows.append(
             {
@@ -107,6 +113,10 @@ def main() -> None:
                 "salary_min": parsed.salary_min,
                 "salary_max": parsed.salary_max,
                 "salary_unit": parsed.salary_unit,
+                "department_raw": department_raw,
+                "department": normalize_department(department_raw),
+                "seniority": classify_seniority(title),
+                "work_mode": classify_work_mode(location),
                 "description_md": description_md,
             }
         )
