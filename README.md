@@ -79,6 +79,6 @@ python scrape_wayback.py --board ashby --company crusoe
 
 ## Department Taxonomy
 
-Jobs are classified into 11 normalized departments for cross-company comparison:
+Jobs are classified into 15 normalized departments for cross-company comparison:
 
-Research, Manufacturing, Engineering, Product & Design, People, Finance & Legal, Sales & BD, Marketing & Comms, Public Policy, Security & IT, Operations & Other
+Research, Manufacturing, Engineering, Product, Design, People, Finance, Legal, Sales & BD, Marketing & Comms, Public Policy, Security & Compliance, IT, Operations, Other

@@ -118,31 +118,35 @@ SENIORITY_ORDER = [
     "Staff / Principal", "Lead", "Manager", "Director+",
 ]
 
-# Normalized department taxonomy — maps company-specific departments to ~9 common buckets.
+# Normalized department taxonomy — 15 common buckets for cross-company analysis.
 # Rules are ordered most-specific-first; first regex match wins.
 NORMALIZED_DEPARTMENT_RULES = [
     ("Research",          r"\bresearch\b"),
     ("Manufacturing",     r"\bmanufactur"),
+    ("Design",            r"\bdesign\b"),
     ("Engineering",       r"\bengineering\b|\bsoftware\b|\bhardware\b|\binfrastructure\b"),
-    ("Product & Design",  r"\bproduct\b|\bdesign\b"),
+    ("Product",           r"\bproduct\b"),
     ("People",            r"\bpeople\b|\brecruit|\bHR\b|\bhuman resources\b"),
-    ("Finance & Legal",   r"\bfinance\b|\blegal\b|\baccounting\b|\bcounsel\b"),
+    ("Finance",           r"\bfinance\b|\baccounting\b"),
+    ("Legal",             r"\blegal\b|\bcounsel\b"),
     ("Sales & BD",        r"\bsales\b|\bbusiness development\b|\b[BS]DR\b|\bBD\b|\bGTM\b|\bgo.to.market\b"),
     ("Marketing & Comms", r"\bmarketing\b|\bbrand\b|\bcommunication"),
     ("Public Policy",     r"\bpolicy\b|\bpublic affairs\b|\bsocietal impacts?\b|\bgeopolitics\b"),
-    ("Security & IT",     r"\bsecurity\b|\bsafeguard|\bIT\b|\bcompliance\b"),
-    ("Operations & Other", r".*"),  # catch-all
+    ("Security & Compliance", r"\bsecurity\b|\bsafeguard|\bcompliance\b"),
+    ("IT",                r"\bIT\b|\binformation technology\b"),
+    ("Operations",        r"\boperation|\bcompute\b|\bdata center\b|\bprocurement\b|\breal estate\b|\bsupply chain\b"),
+    ("Other",             r".*"),  # catch-all
 ]
 
 
 def normalize_department(department_raw: str) -> str:
-    """Map a company-specific department name to a normalized ~9-bucket taxonomy."""
+    """Map a company-specific department name to a normalized 15-bucket taxonomy."""
     if not isinstance(department_raw, str) or not department_raw:
-        return "Operations & Other"
+        return "Other"
     for bucket, pattern in NORMALIZED_DEPARTMENT_RULES:
         if re.search(pattern, department_raw, re.I):
             return bucket
-    return "Operations & Other"
+    return "Other"
 
 
 def classify_department(title: str) -> str:
