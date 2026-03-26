@@ -121,14 +121,16 @@ SENIORITY_ORDER = [
 # Normalized department taxonomy — maps company-specific departments to ~9 common buckets.
 # Rules are ordered most-specific-first; first regex match wins.
 NORMALIZED_DEPARTMENT_RULES = [
-    ("Research",        r"\bresearch\b"),
-    ("Engineering",     r"\bengineering\b|\bsoftware\b|\bhardware\b|\binfrastructure\b"),
-    ("Product & Design", r"\bproduct\b|\bdesign\b"),
-    ("People",          r"\bpeople\b|\brecruit|\bHR\b|\bhuman resources\b"),
-    ("Finance & Legal", r"\bfinance\b|\blegal\b|\baccounting\b|\bcounsel\b"),
-    ("Sales & BD",      r"\bsales\b|\bbusiness development\b|\b[BS]DR\b|\bBD\b"),
+    ("Research",          r"\bresearch\b"),
+    ("Manufacturing",     r"\bmanufactur"),
+    ("Engineering",       r"\bengineering\b|\bsoftware\b|\bhardware\b|\binfrastructure\b"),
+    ("Product & Design",  r"\bproduct\b|\bdesign\b"),
+    ("People",            r"\bpeople\b|\brecruit|\bHR\b|\bhuman resources\b"),
+    ("Finance & Legal",   r"\bfinance\b|\blegal\b|\baccounting\b|\bcounsel\b"),
+    ("Sales & BD",        r"\bsales\b|\bbusiness development\b|\b[BS]DR\b|\bBD\b|\bGTM\b|\bgo.to.market\b"),
     ("Marketing & Comms", r"\bmarketing\b|\bbrand\b|\bcommunication"),
-    ("Security & IT",   r"\bsecurity\b|\bsafeguard|\bIT\b|\bcompliance\b"),
+    ("Public Policy",     r"\bpolicy\b|\bpublic affairs\b|\bsocietal impacts?\b|\bgeopolitics\b"),
+    ("Security & IT",     r"\bsecurity\b|\bsafeguard|\bIT\b|\bcompliance\b"),
     ("Operations & Other", r".*"),  # catch-all
 ]
 

@@ -38,22 +38,39 @@ def test_anthropic_security():
     assert normalize_department("Safeguards (Trust & Safety)") == "Security & IT"
 
 
+def test_anthropic_public_policy():
+    assert normalize_department("AI Public Policy & Societal Impacts") == "Public Policy"
+
+
 def test_anthropic_operations():
     assert normalize_department("Technical Program Management") == "Operations & Other"
     assert normalize_department("Compute") == "Operations & Other"
     assert normalize_department("Data Science & Analytics") == "Operations & Other"
-    assert normalize_department("AI Public Policy & Societal Impacts") == "Operations & Other"
 
 
 def test_crusoe_departments():
+    assert normalize_department("Cloud Engineering") == "Engineering"
+    assert normalize_department("Digital Infrastructure Group (DIG)") == "Engineering"
+    assert normalize_department("Power Infrastructure") == "Engineering"
     assert normalize_department("Software") == "Engineering"
     assert normalize_department("Hardware") == "Engineering"
     assert normalize_department("Product and Design") == "Product & Design"
     assert normalize_department("People") == "People"
-    assert normalize_department("Finance and Accounting") == "Finance & Legal"
+    assert normalize_department("Accounting and Finance") == "Finance & Legal"
+    assert normalize_department("Strategic Finance and Corporate Development") == "Finance & Legal"
+    assert normalize_department("Legal") == "Finance & Legal"
     assert normalize_department("Sales and BD") == "Sales & BD"
+    assert normalize_department("Cloud Go-To-Market (GTM)") == "Sales & BD"
+    assert normalize_department("Marketing") == "Marketing & Comms"
+    assert normalize_department("Public Affairs and Sustainability") == "Public Policy"
     assert normalize_department("IT, Compliance, and Security") == "Security & IT"
-    assert normalize_department("Operations") == "Operations & Other"
+    assert normalize_department("Manufacturing (MFG)") == "Manufacturing"
+    assert normalize_department("Data Center Operations (DIG)") == "Operations & Other"
+    assert normalize_department("Business Operations") == "Operations & Other"
+    assert normalize_department("Procurement and Sourcing") == "Operations & Other"
+    assert normalize_department("Real Estate (DIG)") == "Operations & Other"
+    assert normalize_department("Energy Innovation and Commercialization") == "Operations & Other"
+    assert normalize_department("Environmental, Health and Safety (EHS)") == "Operations & Other"
 
 
 def test_unknown_department():
