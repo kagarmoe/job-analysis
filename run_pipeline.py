@@ -103,7 +103,8 @@ def inject_notebook_config(notebook_path: str, replacements: dict) -> str:
             cell["source"] = source
             break  # only modify first code cell
 
-    tmp_path = f"/tmp/pipeline_{Path(notebook_path).name}"
+    # Write to project dir so the kernel can find classify.py
+    tmp_path = f".pipeline_{Path(notebook_path).name}"
     Path(tmp_path).write_text(json.dumps(nb, indent=1))
     return tmp_path
 
@@ -111,11 +112,12 @@ def inject_notebook_config(notebook_path: str, replacements: dict) -> str:
 def run_notebook(notebook_path: str, output_label: str) -> bool:
     """Execute a notebook. Returns True on success."""
     log.info("Running %s ...", output_label)
+    output_path = f"/tmp/pipeline_out_{Path(notebook_path).stem}.ipynb"
     cmd = [
         "jupyter", "nbconvert", "--to", "notebook", "--execute",
         f"--ExecutePreprocessor.kernel_name={KERNEL_NAME}",
         notebook_path,
-        "--output", f"/tmp/pipeline_out_{Path(notebook_path).stem}.ipynb",
+        "--output", output_path,
     ]
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
@@ -203,6 +205,10 @@ def main():
     for name, ok in results:
         status = "✓" if ok else "✗"
         print(f"  {status} {name}")
+
+    # Clean up temp notebooks
+    for p in Path(".").glob(".pipeline_*.ipynb"):
+        p.unlink()
 
     if all(ok for _, ok in results):
         print("\nAll notebooks complete. Open them in Jupyter to view charts.")

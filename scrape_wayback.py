@@ -392,6 +392,104 @@ def write_csv(records: list[JobRecord], path: Path) -> None:
     log.info("Wrote %d records to %s", len(records), path)
 
 
+def scrape_ashby_api_snapshots(company: str, current_csv: Path) -> list[JobRecord]:
+    """
+    Fetch archived Ashby API snapshots from the Wayback Machine.
+
+    Instead of fetching individual job pages (which are React SPAs and archive
+    poorly), fetch the full job board API endpoint snapshots. Each snapshot
+    contains all jobs with their descriptionHtml — same format as the live API.
+    """
+    from classify import (
+        SalaryParseResult, extract_salary_block_from_html, parse_salary_text,
+    )
+
+    api_url = f"api.ashbyhq.com/posting-api/job-board/{company}"
+    log.info("Querying CDX for archived Ashby API snapshots: %s", api_url)
+    results = cdx_query(api_url, filter="statuscode:200")
+    log.info("Found %d API snapshots", len(results))
+
+    if not results:
+        return []
+
+    # Track all jobs across snapshots: {job_id: JobRecord}
+    all_jobs: dict[str, JobRecord] = {}
+
+    for i, row in enumerate(results):
+        ts = row["timestamp"]
+        url = row["original"]
+        snapshot_url = f"{WEB_URL}/{ts}id_/{url}"
+        date_str = ts[:8]  # YYYYMMDD
+
+        log.info("  [%d/%d] Fetching API snapshot from %s-%s-%s",
+                 i + 1, len(results), date_str[:4], date_str[4:6], date_str[6:8])
+
+        try:
+            resp = SESSION.get(snapshot_url, timeout=60)
+            if resp.status_code != 200:
+                log.warning("    Got status %d, skipping", resp.status_code)
+                continue
+
+            data = resp.json()
+            jobs = data.get("jobs", [])
+            log.info("    Found %d jobs in snapshot", len(jobs))
+
+            for job in jobs:
+                jid = job.get("id", "")
+                if not jid:
+                    continue
+
+                title = job.get("title", "")
+                location = job.get("location", "")
+                department = job.get("department", "")
+                content_html = job.get("descriptionHtml", "")
+
+                # Parse salary from description HTML
+                salary_block = extract_salary_block_from_html(content_html or "")
+                parsed = parse_salary_text(salary_block) if salary_block else SalaryParseResult("", None, None, None, None)
+
+                if jid not in all_jobs:
+                    all_jobs[jid] = JobRecord(
+                        job_id=jid,
+                        title=title,
+                        location=location,
+                        department=department,
+                        salary_text=parsed.salary_text,
+                        salary_min=parsed.salary_min,
+                        salary_max=parsed.salary_max,
+                        currency=parsed.currency or "",
+                        salary_unit=parsed.salary_unit or "",
+                        first_seen=date_str,
+                        last_seen=date_str,
+                        snapshot_url=snapshot_url,
+                    )
+                else:
+                    rec = all_jobs[jid]
+                    if date_str < rec.first_seen:
+                        rec.first_seen = date_str
+                    if date_str > rec.last_seen:
+                        rec.last_seen = date_str
+                    # Update salary if we didn't have it before
+                    if not rec.salary_min and parsed.salary_min:
+                        rec.salary_text = parsed.salary_text
+                        rec.salary_min = parsed.salary_min
+                        rec.salary_max = parsed.salary_max
+                        rec.currency = parsed.currency or ""
+                        rec.salary_unit = parsed.salary_unit or ""
+
+        except Exception as e:
+            log.warning("    Failed to parse snapshot: %s", e)
+            continue
+
+        time.sleep(REQUEST_DELAY)
+
+    records = list(all_jobs.values())
+    mark_active_jobs(records, current_csv)
+
+    log.info("Ashby API snapshots: %d unique jobs across %d snapshots", len(records), len(results))
+    return records
+
+
 def main():
     ap = argparse.ArgumentParser(description="Scrape historical job postings from the Wayback Machine")
     ap.add_argument("--board", required=True, choices=["greenhouse", "ashby"])
@@ -403,32 +501,32 @@ def main():
     current_csv = Path(f"{args.company}_salaries.csv")
     progress_file = Path(f".wayback_progress_{args.company}.json")
 
-    if args.board == "greenhouse":
+    if args.board == "ashby":
+        # Ashby: fetch archived API snapshots (much more reliable than individual pages)
+        records = scrape_ashby_api_snapshots(args.company, current_csv)
+    else:
+        # Greenhouse: fetch individual archived job pages
         job_url_patterns = [
             f"boards.greenhouse.io/{args.company}/jobs/*",
             f"job-boards.greenhouse.io/{args.company}/jobs/*",
         ]
-    elif args.board == "ashby":
-        job_url_patterns = [
-            f"jobs.ashbyhq.com/{args.company}/*",
-        ]
 
-    progress = load_progress(progress_file)
+        progress = load_progress(progress_file)
 
-    # Step 1: Build index from CDX (fast, no page fetches)
-    if progress.get("job_index"):
-        job_index = progress["job_index"]
-        log.info("Loaded job index from progress: %d jobs", len(job_index))
-    else:
-        job_index = step1_build_job_index(job_url_patterns, args.board)
-        progress["job_index"] = job_index
-        save_progress(progress, progress_file)
+        # Step 1: Build index from CDX (fast, no page fetches)
+        if progress.get("job_index"):
+            job_index = progress["job_index"]
+            log.info("Loaded job index from progress: %d jobs", len(job_index))
+        else:
+            job_index = step1_build_job_index(job_url_patterns, args.board)
+            progress["job_index"] = job_index
+            save_progress(progress, progress_file)
 
-    # Step 2: Fetch individual job details (resumable)
-    records = step2_fetch_job_details(job_index, progress, args.board, progress_file)
+        # Step 2: Fetch individual job details (resumable)
+        records = step2_fetch_job_details(job_index, progress, args.board, progress_file)
 
-    # Mark active vs closed
-    mark_active_jobs(records, current_csv)
+        # Mark active vs closed
+        mark_active_jobs(records, current_csv)
 
     # Write output
     write_csv(records, out_path)
