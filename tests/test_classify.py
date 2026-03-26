@@ -59,6 +59,8 @@ def test_crusoe_departments():
 def test_unknown_department():
     assert normalize_department("Something Totally New") == "Operations & Other"
     assert normalize_department("") == "Operations & Other"
+    assert normalize_department(None) == "Operations & Other"
+    assert normalize_department(42) == "Operations & Other"
 
 
 def test_other_passthrough():
