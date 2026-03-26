@@ -1,6 +1,11 @@
 """Shared classification utilities for Anthropic job analysis notebooks."""
 
+import html
 import re
+from dataclasses import dataclass
+from typing import Optional
+
+from bs4 import BeautifulSoup
 
 # Approximate exchange rates as of Feb 2026
 TO_USD = {
@@ -113,6 +118,32 @@ SENIORITY_ORDER = [
     "Staff / Principal", "Lead", "Manager", "Director+",
 ]
 
+# Normalized department taxonomy — maps company-specific departments to ~9 common buckets.
+# Rules are ordered most-specific-first; first regex match wins.
+NORMALIZED_DEPARTMENT_RULES = [
+    ("Research",          r"\bresearch\b"),
+    ("Manufacturing",     r"\bmanufactur"),
+    ("Engineering",       r"\bengineering\b|\bsoftware\b|\bhardware\b|\binfrastructure\b"),
+    ("Product & Design",  r"\bproduct\b|\bdesign\b"),
+    ("People",            r"\bpeople\b|\brecruit|\bHR\b|\bhuman resources\b"),
+    ("Finance & Legal",   r"\bfinance\b|\blegal\b|\baccounting\b|\bcounsel\b"),
+    ("Sales & BD",        r"\bsales\b|\bbusiness development\b|\b[BS]DR\b|\bBD\b|\bGTM\b|\bgo.to.market\b"),
+    ("Marketing & Comms", r"\bmarketing\b|\bbrand\b|\bcommunication"),
+    ("Public Policy",     r"\bpolicy\b|\bpublic affairs\b|\bsocietal impacts?\b|\bgeopolitics\b"),
+    ("Security & IT",     r"\bsecurity\b|\bsafeguard|\bIT\b|\bcompliance\b"),
+    ("Operations & Other", r".*"),  # catch-all
+]
+
+
+def normalize_department(department_raw: str) -> str:
+    """Map a company-specific department name to a normalized ~9-bucket taxonomy."""
+    if not isinstance(department_raw, str) or not department_raw:
+        return "Operations & Other"
+    for bucket, pattern in NORMALIZED_DEPARTMENT_RULES:
+        if re.search(pattern, department_raw, re.I):
+            return bucket
+    return "Operations & Other"
+
 
 def classify_department(title: str) -> str:
     if not isinstance(title, str):
@@ -156,3 +187,166 @@ def add_usd_salary(df):
     df["max_usd"] = df["salary_max"] * df["rate"]
     df["mid_usd"] = (df["min_usd"] + df["max_usd"]) / 2
     return df
+
+
+# ---------------------------------------------------------------------------
+# Salary parsing (moved from scrape_anthropic.py for reuse across scrapers)
+# ---------------------------------------------------------------------------
+
+# Compile once at import time.
+DASH_PATTERN = r"(?:\u2013|\u2014|-|–|—|\s+to\s+|\s+and\s+)"
+CURRENCY_SYM_1 = r"(?P<sym1>\$|£|€)"
+CURRENCY_SYM_2 = r"(?P<sym2>\$|£|€)"
+NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d+)"
+UNIT_SUFFIX = r"(?:/\w+)?"  # optional e.g. /hr, /yr
+
+SALARY_RANGE_RE = re.compile(
+    rf"{CURRENCY_SYM_1}\s*(?P<min>{NUMBER}){UNIT_SUFFIX}\s*{DASH_PATTERN}\s*"
+    rf"(?:{CURRENCY_SYM_2}\s*)?(?P<max>{NUMBER}){UNIT_SUFFIX}"
+)
+
+
+@dataclass
+class SalaryParseResult:
+    salary_text: str
+    currency: Optional[str]
+    salary_min: Optional[int]
+    salary_max: Optional[int]
+    salary_unit: Optional[str]  # annual, hourly, monthly, etc.
+
+
+def normalize_whitespace(s: str) -> str:
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def looks_like_salary_text(text: str) -> bool:
+    if not text:
+        return False
+    if SALARY_RANGE_RE.search(text):
+        return True
+    # Some posts mention currency code even if the range is formatted differently
+    return bool(re.search(r"\b(USD|EUR|GBP|CAD|AUD)\b", text))
+
+
+COMPENSATION_SENTENCE_RE = re.compile(
+    r"Compensation will be[^.]*\$[^.]+\.",
+    re.I,
+)
+
+
+def extract_salary_block_from_html(content_html: str) -> Optional[str]:
+    """
+    Find a salary-ish block from the job HTML content. Returns normalized text or None.
+    """
+    if not content_html:
+        return None
+
+    soup = BeautifulSoup(html.unescape(content_html), "html.parser")
+
+    # Fast path: match "Compensation will be paid in the range of $X - $Y" directly
+    plain = normalize_whitespace(soup.get_text(" ", strip=True))
+    m = COMPENSATION_SENTENCE_RE.search(plain)
+    if m:
+        return m.group(0)
+
+    heading_patterns = [
+        re.compile(r"\bAnnual Salary\b", re.I),
+        re.compile(r"\bSalary\b", re.I),
+        re.compile(r"\bCompensation\b", re.I),
+        re.compile(r"\bPay\b", re.I),
+    ]
+
+    candidates = []
+    for tag in soup.find_all(["h1", "h2", "h3", "h4", "strong", "b", "p", "span", "div", "li"]):
+        txt = normalize_whitespace(tag.get_text(" ", strip=True))
+        if not txt:
+            continue
+        if any(p.search(txt) for p in heading_patterns):
+            candidates.append(tag)
+
+    for tag in candidates:
+        parent = tag.parent if tag.parent else tag
+        parent_txt = normalize_whitespace(parent.get_text(" ", strip=True)) if parent else ""
+        if looks_like_salary_text(parent_txt):
+            return parent_txt
+
+        # look at a few next siblings
+        collected = []
+        sib = parent
+        for _ in range(8):
+            sib = sib.find_next_sibling()
+            if sib is None:
+                break
+            t = normalize_whitespace(sib.get_text(" ", strip=True))
+            if t:
+                collected.append(t)
+                joined = " ".join(collected)
+                if looks_like_salary_text(joined):
+                    return joined
+
+    # fallback: scan whole text
+    all_text = normalize_whitespace(soup.get_text(" ", strip=True))
+    m = re.search(r"(Annual Salary|Salary|Compensation).{0,400}", all_text, flags=re.I)
+    if m:
+        window = all_text[m.start() : min(len(all_text), m.start() + 500)]
+        if looks_like_salary_text(window):
+            return window
+
+    mm = SALARY_RANGE_RE.search(all_text)
+    if mm:
+        s = max(0, mm.start() - 80)
+        e = min(len(all_text), mm.end() + 80)
+        return all_text[s:e]
+
+    return None
+
+
+def parse_salary_text(block: str) -> SalaryParseResult:
+    block = normalize_whitespace(html.unescape(block))
+
+    # unit
+    unit = None
+    if re.search(r"\bAnnual\b|\bper year\b|\byearly\b", block, re.I):
+        unit = "annual"
+    elif re.search(r"\bhour\b|\bhourly\b|\bper hour\b|/hr\b", block, re.I):
+        unit = "hourly"
+    elif re.search(r"\bmonth\b|\bmonthly\b|\bper month\b", block, re.I):
+        unit = "monthly"
+    elif re.search(r"\bweek\b|\bweekly\b|\bper week\b", block, re.I):
+        unit = "weekly"
+
+    # currency code
+    currency = None
+    m_code = re.search(r"\b(USD|EUR|GBP|CAD|AUD)\b", block)
+    if m_code:
+        currency = m_code.group(1)
+
+    # numeric range
+    m = SALARY_RANGE_RE.search(block)
+    if m:
+        sym = m.group("sym1")
+        min_val = int(m.group("min").replace(",", ""))
+        max_val = int(m.group("max").replace(",", ""))
+        if not currency:
+            currency = {"$": "USD", "€": "EUR", "£": "GBP"}.get(sym)
+        return SalaryParseResult(block, currency, min_val, max_val, unit)
+
+    # secondary pattern: "131,040–165,000 USD"
+    m2 = re.search(rf"(\d{{1,3}}(?:,\d{{3}})+|\d+)\s*{DASH_PATTERN}\s*(\d{{1,3}}(?:,\d{{3}})+|\d+)\s*(USD|EUR|GBP|CAD|AUD)?",
+                   block)
+    if m2:
+        min_val = int(m2.group(1).replace(",", ""))
+        max_val = int(m2.group(2).replace(",", ""))
+        if not currency and m2.group(3):
+            currency = m2.group(3)
+        return SalaryParseResult(block, currency, min_val, max_val, unit)
+
+    # single amount fallback: "$1,415/per week"
+    m3 = re.search(r"(?P<sym>\$|£|€)\s*(?P<val>\d{1,3}(?:,\d{3})+|\d+)", block)
+    if m3:
+        val = int(m3.group("val").replace(",", ""))
+        if not currency:
+            currency = {"$": "USD", "€": "EUR", "£": "GBP"}.get(m3.group("sym"))
+        return SalaryParseResult(block, currency, val, val, unit)
+
+    return SalaryParseResult(block, currency, None, None, unit)
