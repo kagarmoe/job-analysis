@@ -1,11 +1,12 @@
 # Job Analysis Project
 
 ## Project Overview
-Analyzing Anthropic job postings scraped from Greenhouse job board.
+Analyzing job postings scraped from multiple job boards (Greenhouse, Ashby).
 
 ## Key Files
-- `classify.py` — Shared classification utilities (department, seniority, work mode, USD conversion). All three notebooks import from here. Single source of truth for the 16 Anthropic department regex rules.
-- `scrape_anthropic.py` — Live scraper for current jobs via Greenhouse API. Outputs `anthropic_salaries.csv`.
+- `classify.py` — Shared classification utilities (salary parsing, department, seniority, work mode, USD conversion, normalized department taxonomy). All notebooks and scrapers import from here.
+- `scrape_anthropic.py` — Live scraper for Anthropic jobs via Greenhouse API. Outputs `anthropic_salaries.csv`.
+- `scrape_ashby.py` — Live scraper for Ashby-hosted job boards. Usage: `python scrape_ashby.py --company crusoe`. Outputs `{company}_salaries.csv`.
 - `scrape_wayback.py` — Historical scraper via Wayback Machine CDX API. Outputs `anthropic_salaries_historical.csv`.
 - `analyze_salaries.ipynb` — Part I: Current salary analysis (34 cells, sections 1-9).
 - `analyze_nlp.ipynb` — NLP & text analysis on job descriptions (19 cells, requires sklearn + wordcloud).
@@ -19,7 +20,7 @@ Analyzing Anthropic job postings scraped from Greenhouse job board.
 - `analyze_salaries.ipynb` — no special dependencies beyond pandas/matplotlib/seaborn/bs4
 - `analyze_nlp.ipynb` — requires scikit-learn and wordcloud in the notebook kernel
 - `analyze_historical.ipynb` — no special dependencies beyond pandas/matplotlib/seaborn
-- Department classifier uses Anthropic's real 16 departments (regex on job titles)
+- Department classifier uses Anthropic's real 16 departments (regex on job titles) + normalized 9-bucket taxonomy for cross-company analysis
 - Known issue: sklearn may not be in the notebook kernel's Python. Fix: `!{sys.executable} -m pip install scikit-learn wordcloud`
 
 ## TODO — Future Data Sources
@@ -30,5 +31,7 @@ Analyzing Anthropic job postings scraped from Greenhouse job board.
 - Greenhouse API content is double-escaped HTML — must `html.unescape()` before parsing
 - Currency rates: USD=1.0, EUR=1.05, GBP=1.27, CAD=0.72, AUD=0.64
 - Department rules: 16 ordered regex patterns, most-specific-first, in classify.py
+- Normalized departments: 9 common buckets (Engineering, Research, Product & Design, People, Finance & Legal, Sales & BD, Marketing & Comms, Security & IT, Operations & Other)
+- Ashby API: `https://api.ashbyhq.com/posting-api/job-board/{company}` — returns JSON with department/team as structured fields
 - Word clouds: use `generate_from_frequencies()` with pre-filtered words to ensure stopword removal
 - Wayback Machine: 2.5s delay between fetches, 5 retries with 5s backoff
