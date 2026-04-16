@@ -11,7 +11,7 @@ python run_pipeline.py <job_posting_url>
 Example:
 
 ```bash
-python run_pipeline.py https://jobs.ashbyhq.com/{company}/{job_id}
+python run_pipeline.py https://jobs.ashbyhq.com/<company>/<job_id>
 ```
 
 This single command:
@@ -26,9 +26,9 @@ Output notebooks are written to `/tmp/pipeline_out_*.ipynb` — open them in Jup
 ## Supported Job Boards
 
 | Board | URL Pattern 
-|---|---|---|
-| Ashby | `jobs.ashbyhq.com/{company}/{job_id}`
-| Greenhouse | `job-boards.greenhouse.io/{company}/jobs/{job_id}` 
+|---|---|
+| Ashby | `jobs.ashbyhq.com/<company>/<job_id>`
+| Greenhouse | `job-boards.greenhouse.io/<company>/jobs/<job_id>` 
 
 ## Analysis Notebooks
 
@@ -54,7 +54,9 @@ Comparables are found by matching on normalized department + similar scope score
 
 ## Setup
 
-Requires Python 3.10+ and a Jupyter kernel named `job-analysis`.
+Requires Python 3.10+ and a Jupyter kernel. I named my kernel "job-analysis", which may or may not be hard-coded somewhere. 
+There is no upstream "job-analysis" kernel, it's a decision that I made somewhere along the way.
+It may, or may not, be a problem. YMMV.
 
 ```bash
 python -m venv .venv
@@ -73,8 +75,8 @@ python scrape_greenhouse.py --company anthropic
 python scrape_ashby.py --company crusoe
 
 # Historical jobs (Wayback Machine)
-python scrape_wayback.py --board greenhouse --company anthropic
-python scrape_wayback.py --board ashby --company crusoe
+python scrape_wayback.py --board greenhouse --company <company>
+python scrape_wayback.py --board ashby --company <company>
 ```
 
 ## Department Taxonomy
