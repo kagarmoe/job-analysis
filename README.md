@@ -11,7 +11,7 @@ python run_pipeline.py <job_posting_url>
 Example:
 
 ```bash
-python run_pipeline.py https://jobs.ashbyhq.com/Crusoe/2689707b-7314-4246-ac95-1e6466970ba3
+python run_pipeline.py https://jobs.ashbyhq.com/{company}/{job_id}
 ```
 
 This single command:
@@ -25,10 +25,10 @@ Output notebooks are written to `/tmp/pipeline_out_*.ipynb` — open them in Jup
 
 ## Supported Job Boards
 
-| Board | URL Pattern | Example |
+| Board | URL Pattern 
 |---|---|---|
-| Ashby | `jobs.ashbyhq.com/{company}/{job_id}` | Crusoe, etc. |
-| Greenhouse | `job-boards.greenhouse.io/{company}/jobs/{job_id}` | Anthropic, etc. |
+| Ashby | `jobs.ashbyhq.com/{company}/{job_id}`
+| Greenhouse | `job-boards.greenhouse.io/{company}/jobs/{job_id}` 
 
 ## Analysis Notebooks
 
