@@ -13,6 +13,7 @@ import csv
 import html
 import logging
 import re
+import sqlite3
 from typing import Any, Dict, List
 
 logging.basicConfig(
@@ -50,8 +51,8 @@ def _html_to_markdown(content_html: str) -> str:
     return md
 
 
-def scrape_all_jobs(company: str) -> tuple[list[dict], str]:
-    """Returns (jobs, source_date). source_date = today as YYYYMMDD."""
+def scrape_all_jobs(company: str) -> tuple[list[dict], str, sqlite3.Connection]:
+    """Returns (jobs, source_date, db). source_date = today as YYYYMMDD."""
     import copper as _copper
     from datetime import date
     url = f"https://api.ashbyhq.com/posting-api/job-board/{company}"
@@ -64,7 +65,7 @@ def scrape_all_jobs(company: str) -> tuple[list[dict], str]:
                   content=resp.text, source_date=source_date)
     jobs = resp.json().get("jobs", [])
     log.info("Fetched %d jobs", len(jobs))
-    return jobs, source_date
+    return jobs, source_date, db
 
 
 def main() -> None:
@@ -74,10 +75,8 @@ def main() -> None:
     args = ap.parse_args()
 
     out_path = args.out or f"{args.company}_salaries.csv"
-    jobs, source_date = scrape_all_jobs(args.company)
-
     import copper as _copper
-    _copper_db = _copper.open_db("ashby")
+    jobs, source_date, _copper_db = scrape_all_jobs(args.company)
 
     fieldnames = [
         "job_id",
