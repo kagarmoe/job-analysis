@@ -5,3 +5,4 @@ __pycache__/
 .claude/
 .wayback_progress*.json
 .pipeline_*.ipynb
+*.csv
