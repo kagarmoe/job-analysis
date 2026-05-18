@@ -96,7 +96,8 @@ def run_scraper(board: str, company: str) -> Path:
     elif board == "greenhouse":
         cmd = [sys.executable, "scrape_greenhouse.py", "--company", company, "--out", str(out_csv)]
     else:
-        raise ValueError(f"Unknown board: {board}")
+        log.warning("run_scraper called for unsupported board %r — skipping", board)
+        return None
 
     log.info("Scraping current jobs: %s", " ".join(cmd))
     subprocess.run(cmd, check=True)
