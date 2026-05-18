@@ -87,6 +87,10 @@ _ASHBY_JOB_URL_RE = _re.compile(
 _ASHBY_API_BOARD_RE = _re.compile(
     r"api\.ashbyhq\.com/posting-api/job-board/([^/]+)$"
 )
+_ASHBY_INDIVIDUAL_JOB_RE = _re.compile(
+    r"api\.ashbyhq\.com/posting-api/job-board/[^/]+/job/"
+    r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+)
 
 
 def derive_ashby(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connection,
@@ -94,9 +98,10 @@ def derive_ashby(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connectio
     """Derive per-job bronze records from copper for an Ashby company."""
     rows = copper_conn.execute(
         "SELECT id, url, content, source_date FROM snapshots "
-        "WHERE url LIKE ? OR url LIKE ?",
+        "WHERE url LIKE ? OR url LIKE ? OR url LIKE ?",
         (f"%jobs.ashbyhq.com/{company}/%",
-         f"%api.ashbyhq.com/posting-api/job-board/{company}%"),
+         f"%api.ashbyhq.com/posting-api/job-board/{company}%",
+         f"%api.ashbyhq.com/posting-api/job-board/{company}/job/%"),
     ).fetchall()
 
     count = 0
@@ -119,6 +124,17 @@ def derive_ashby(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connectio
                       original_url=url, http_status=200,
                       content=_json.dumps(job), copper_id=row["id"])
                 count += 1
+            continue
+
+        # Individual job API response (wayback fallback path)
+        m_ind = _ASHBY_INDIVIDUAL_JOB_RE.search(url)
+        if m_ind:
+            job_id = m_ind.group(1)
+            store(bronze_conn, company=company, board="ashby", job_id=job_id,
+                  page_type="api_board", source_date=row["source_date"],
+                  original_url=url, http_status=200, content=content,
+                  copper_id=row["id"])
+            count += 1
             continue
 
         # Individual job page or /application page

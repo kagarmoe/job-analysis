@@ -88,39 +88,28 @@ def run_bronze_derivation(board: str, company: str, job_id: str = "") -> None:
     log.info("Bronze derivation: %d records for %s/%s", count, board, company)
 
 
-def run_scraper(board: str, company: str) -> Path:
-    """Run the appropriate scraper. Returns path to output CSV."""
-    out_csv = Path(f"{company}_salaries.csv")
+def run_scraper(board: str, company: str) -> None:
+    """Run the appropriate scraper for the given board."""
     if board == "ashby":
-        cmd = [sys.executable, "scrape_ashby.py", "--company", company, "--out", str(out_csv)]
+        cmd = [sys.executable, "scrape_ashby.py", "--company", company]
     elif board == "greenhouse":
-        cmd = [sys.executable, "scrape_greenhouse.py", "--company", company, "--out", str(out_csv)]
+        cmd = [sys.executable, "scrape_greenhouse.py", "--company", company]
     else:
         log.warning("run_scraper called for unsupported board %r — skipping", board)
-        return None
+        return
 
     log.info("Scraping current jobs: %s", " ".join(cmd))
     subprocess.run(cmd, check=True)
-    return out_csv
 
 
-def run_wayback(board: str, company: str) -> Path | None:
-    """Run wayback scraper if historical CSV doesn't exist for this company."""
-    hist_csv = Path(f"{company}_salaries_historical.csv")
-    if hist_csv.exists():
-        log.info("Historical data exists: %s (skipping wayback)", hist_csv)
-        return hist_csv
-
-    log.info("No historical data for %s — running wayback scraper...", company)
-    cmd = [sys.executable, "scrape_wayback.py", "--board", board, "--company", company,
-           "--out", str(hist_csv)]
+def run_wayback(board: str, company: str) -> None:
+    """Run wayback scraper to populate copper/bronze with historical snapshots."""
+    log.info("Running wayback scraper for %s/%s...", board, company)
+    cmd = [sys.executable, "scrape_wayback.py", "--board", board, "--company", company]
     try:
         subprocess.run(cmd, check=True)
-        if hist_csv.exists():
-            return hist_csv
     except subprocess.CalledProcessError:
         log.warning("Wayback scraper failed — continuing without historical data")
-    return None
 
 
 def inject_notebook_config(notebook_path: str, replacements: dict) -> str:

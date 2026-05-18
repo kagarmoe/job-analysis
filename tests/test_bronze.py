@@ -90,6 +90,18 @@ def test_derive_ashby_api_board_splits_jobs(copper_db, bronze_db):
     assert json.loads(c2)["department"] == "Product"
 
 
+def test_derive_ashby_individual_api_url(copper_db, bronze_db):
+    api_json = json.dumps({"id": "11111111-2222-3333-4444-555555555555",
+                           "title": "SWE", "department": "Eng"})
+    _copper.store(copper_db,
+                  url="https://api.ashbyhq.com/posting-api/job-board/pinecone/job/11111111-2222-3333-4444-555555555555",
+                  http_status=200, content=api_json, source_date="20250101")
+    bronze.derive_ashby(copper_db, bronze_db, company="pinecone")
+    c = bronze.get_content(bronze_db, "pinecone",
+                           "11111111-2222-3333-4444-555555555555", "20250101", "api_board")
+    assert json.loads(c)["department"] == "Eng"
+
+
 # Task 6b: derive_greenhouse tests
 @pytest.fixture
 def gh_copper_db(tmp_path):
