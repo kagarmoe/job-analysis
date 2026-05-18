@@ -4,6 +4,7 @@ Silver layer: classified, validated, enriched job records.
 One DB at silver/jobs.db. All companies and boards in one table.
 Populated by silver.ipynb — not directly by scrapers.
 """
+import json as _json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -77,17 +78,18 @@ def upsert_job(conn: sqlite3.Connection, record: dict) -> bool:
     if missing:
         conn.execute(
             """INSERT INTO silver_rejected
-               (company, job_id, source_date, rejection_reason, rejected_at)
-               VALUES (?,?,?,?,?)""",
+               (company, job_id, source_date, rejection_reason, raw_content, rejected_at)
+               VALUES (?,?,?,?,?,?)""",
             (record.get("company"), record.get("job_id"), record.get("source_date"),
              f"missing required fields: {missing}",
+             _json.dumps({k: str(v) for k, v in record.items()}, default=str),
              datetime.now(timezone.utc).isoformat()),
         )
         conn.commit()
         return False
 
     has_title    = 1 if record.get("title") else 0
-    has_salary   = 1 if record.get("salary_min") else 0
+    has_salary   = 1 if record.get("salary_min") is not None else 0
     has_location = 1 if record.get("location") else 0
     completeness = has_title + has_salary + has_location
     now = datetime.now(timezone.utc).isoformat()

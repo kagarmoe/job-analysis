@@ -60,3 +60,19 @@ def test_adhoc_board_accepted(db):
         "source_date": "20250101", "title": "Engineer", "bronze_id": 5,
     })
     assert result is True
+
+def test_log_run(db):
+    silver.log_run(db, company="pinecone", board="ashby",
+                   rows_processed=10, rows_upserted=8, rows_rejected=2)
+    row = db.execute("SELECT * FROM audit_log").fetchone()
+    assert row["company"] == "pinecone"
+    assert row["rows_processed"] == 10
+    assert row["rows_upserted"] == 8
+    assert row["rows_rejected"] == 2
+
+def test_rejected_raw_content(db):
+    silver.upsert_job(db, {"company": "x", "board": "ashby",
+                           "source_date": "20250101", "title": "Eng"})
+    row = db.execute("SELECT raw_content FROM silver_rejected").fetchone()
+    assert row["raw_content"] is not None
+    assert "Eng" in row["raw_content"]
