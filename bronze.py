@@ -62,7 +62,7 @@ def get_content(conn: sqlite3.Connection, company: str, job_id: str,
 
 
 def store(conn: sqlite3.Connection, *, company: str, board: str, job_id: str,
-          page_type: str, source_date: str, original_url: str = "",
+          page_type: str, source_date: str, original_url: str | None = None,
           http_status: int, content: str, copper_id: int | None = None) -> None:
     conn.execute(
         """INSERT OR IGNORE INTO snapshots
