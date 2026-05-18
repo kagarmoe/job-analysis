@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
-Scrape salary ranges from any Greenhouse job board and export to CSV.
+Scrape jobs from any Greenhouse job board and store to copper layer.
 
 Usage:
   python scrape_greenhouse.py --company anthropic
-  python scrape_greenhouse.py --company anthropic --out anthropic_salaries.csv
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import html
 import logging
 import re
@@ -72,73 +70,10 @@ def scrape_all_jobs(company: str) -> tuple[list[dict], str, sqlite3.Connection]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--company", required=True, help="Greenhouse company slug (e.g. anthropic)")
-    ap.add_argument("--out", default=None)
+    ap.add_argument("--company", required=True)
     args = ap.parse_args()
-
-    out_path = args.out or f"{args.company}_salaries.csv"
-
     jobs, source_date, _copper_db = scrape_all_jobs(args.company)
-
-    fieldnames = [
-        "job_id",
-        "title",
-        "location",
-        "url",
-        "updated_at",
-        "salary_text",
-        "currency",
-        "salary_min",
-        "salary_max",
-        "salary_unit",
-        "department_raw",
-        "department",
-        "seniority",
-        "work_mode",
-        "description_md",
-    ]
-
-    rows = []
-    for job in jobs:
-        job_id = job.get("id")
-        title = job.get("title")
-        location = (job.get("location") or {}).get("name")
-        updated_at = job.get("updated_at")
-        content_html = job.get("content", "")
-
-        salary_block = extract_salary_block_from_html(content_html or "")
-        parsed = parse_salary_text(salary_block) if salary_block else SalaryParseResult("", None, None, None, None)
-        description_md = _html_to_markdown(content_html or "")
-        department_raw = classify_department(title)
-
-        rows.append(
-            {
-                "job_id": job_id,
-                "title": title,
-                "location": location,
-                "url": greenhouse_job_url(args.company, job_id),
-                "updated_at": updated_at,
-                "salary_text": parsed.salary_text,
-                "currency": parsed.currency,
-                "salary_min": parsed.salary_min,
-                "salary_max": parsed.salary_max,
-                "salary_unit": parsed.salary_unit,
-                "department_raw": department_raw,
-                "department": normalize_department(department_raw),
-                "seniority": classify_seniority(title),
-                "work_mode": classify_work_mode(location),
-                "description_md": description_md,
-            }
-        )
-
-    with open(out_path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        w.writeheader()
-        w.writerows(rows)
-
-    with_salary = sum(1 for r in rows if r["salary_min"] is not None and r["salary_max"] is not None)
-    log.info("Parsed salary ranges for %d / %d jobs", with_salary, len(rows))
-    log.info("Wrote %s", out_path)
+    log.info("Stored %d jobs to copper for %s on %s", len(jobs), args.company, source_date)
 
 
 if __name__ == "__main__":

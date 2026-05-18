@@ -13,14 +13,12 @@ Strategy (optimized to minimize requests):
 """
 
 import argparse
-import csv
 import html as _html
 import json
 import logging
 import re
 import sqlite3
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
 import requests
@@ -28,12 +26,6 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 import copper
-from classify import (
-    SalaryParseResult,
-    extract_salary_block_from_html,
-    parse_salary_text,
-    parse_json_ld_job_posting,
-)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -44,26 +36,6 @@ WEB_URL = "https://web.archive.org/web"
 REQUEST_DELAY = 2.5  # seconds between page fetches
 MAX_RETRIES = 5
 BACKOFF_FACTOR = 5  # 5s, 10s, 20s, 40s, 80s
-
-
-@dataclass
-class JobRecord:
-    job_id: str
-    title: str = ""
-    location: str = ""
-    url: str = ""
-    updated_at: str = ""
-    salary_text: str = ""
-    currency: str = ""
-    salary_min: int | None = None
-    salary_max: int | None = None
-    salary_unit: str = ""
-    description_md: str = ""
-    department: str = ""
-    first_seen: str = ""
-    last_seen: str = ""
-    is_active: bool = False
-    snapshot_url: str = ""
 
 
 def _build_session() -> requests.Session:
@@ -114,48 +86,6 @@ def cdx_query(url: str, **params) -> list[dict]:
     return []
 
 
-
-
-def mark_active_jobs(records: list[JobRecord], current_csv: Path) -> None:
-    if not current_csv.exists():
-        return
-    current_ids = set()
-    with open(current_csv) as f:
-        for row in csv.DictReader(f):
-            current_ids.add(row.get("job_id", ""))
-    for rec in records:
-        rec.is_active = rec.job_id in current_ids
-
-
-def write_csv(records: list[JobRecord], path: Path) -> None:
-    # Schema is a superset of *_salaries.csv: all live columns + historical tracking columns.
-    fields = [
-        "job_id", "title", "location", "url", "updated_at",
-        "salary_text", "currency", "salary_min", "salary_max", "salary_unit",
-        "description_md", "first_seen", "last_seen", "is_active", "snapshot_url",
-    ]
-    with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
-        writer.writeheader()
-        for rec in sorted(records, key=lambda r: r.first_seen):
-            writer.writerow({
-                "job_id": rec.job_id,
-                "title": rec.title,
-                "location": rec.location,
-                "url": rec.url,
-                "updated_at": rec.updated_at,
-                "salary_text": rec.salary_text,
-                "currency": rec.currency,
-                "salary_min": rec.salary_min if rec.salary_min else "",
-                "salary_max": rec.salary_max if rec.salary_max else "",
-                "salary_unit": rec.salary_unit,
-                "description_md": rec.description_md,
-                "first_seen": rec.first_seen,
-                "last_seen": rec.last_seen,
-                "is_active": rec.is_active,
-                "snapshot_url": rec.snapshot_url,
-            })
-    log.info("Wrote %d records to %s", len(records), path)
 
 
 def _extract_job_fields(job: dict, board: str) -> dict:
@@ -241,13 +171,12 @@ def _fetch_snapshot(
     return None, ""
 
 
-def _scrape_ashby_individual_fallback(company: str) -> list[JobRecord]:
+def _scrape_ashby_individual_fallback(company: str) -> None:
     """
     Fallback for Ashby boards where the board-level API was never archived.
 
     Copper write stub — raw fetches are stored to copper; derivation (bronze)
-    and JobRecord construction move to later medallion tasks.
-    Returns [] for now; the CSV will have no fallback rows.
+    and job record construction move to later medallion tasks.
     """
     copper_db = copper.open_db("ashby")
 
@@ -285,7 +214,7 @@ def _scrape_ashby_individual_fallback(company: str) -> list[JobRecord]:
         len(job_timestamps), len(app_snaps), len(page_snaps),
     )
     if not job_timestamps:
-        return []
+        return
 
     # --- 2. Individual API snapshots (separate CDX query) ---
     api_rows = cdx_query(
@@ -322,18 +251,16 @@ def _scrape_ashby_individual_fallback(company: str) -> list[JobRecord]:
             ts, orig_url = page_snaps[jid][0]
             _fetch_snapshot(copper_db, jid, ts, "job_page", orig_url)
 
-    return []
 
-
-def scrape_api_snapshots(board: str, company: str, current_csv: Path) -> list[JobRecord]:
+def scrape_api_snapshots(board: str, company: str) -> None:
     """
-    Fetch archived API snapshots from the Wayback Machine.
+    Fetch archived API snapshots from the Wayback Machine and store to copper.
 
     Works for both Greenhouse and Ashby. Fetches the full job board API endpoint
-    snapshots — each contains all jobs with descriptions for salary parsing.
+    snapshots — each contains all jobs. Raw JSON is written to copper only;
+    derivation (bronze) and classification (silver) happen in later pipeline stages.
     Falls back to per-job scraping for Ashby boards where the board-level API
-    was never archived: tries individual API snapshots, then /application page
-    JSON-LD (which carries clean baseSalary structured data), then stubs.
+    was never archived.
     """
 
     copper_db = copper.open_db(board)
@@ -364,10 +291,8 @@ def scrape_api_snapshots(board: str, company: str, current_csv: Path) -> list[Jo
     if not results:
         if board == "ashby":
             log.info("No board-level API snapshots; trying individual job fallback")
-            return _scrape_ashby_individual_fallback(company)
-        return []
-
-    all_jobs: dict[str, JobRecord] = {}
+            _scrape_ashby_individual_fallback(company)
+        return
 
     for i, row in enumerate(results):
         ts = row["timestamp"]
@@ -381,108 +306,36 @@ def scrape_api_snapshots(board: str, company: str, current_csv: Path) -> list[Jo
                  i + 1, len(results), date_str[:4], date_str[4:6], date_str[6:8])
 
         try:
-            # Try id_ first (raw JSON), fall back to without (some hosts need it)
-            data = None
-            snapshot_url = ""
             for mode in ["id_/", ""]:
                 snapshot_url = f"{WEB_URL}/{ts}{mode}{url}"
                 resp = SESSION.get(snapshot_url, timeout=60)
                 if resp.status_code != 200:
                     continue
                 if resp.text.lstrip()[:1] == "{":
-                    data = resp.json()
                     copper.store(copper_db, url=url, http_status=resp.status_code,
                                  content=resp.text, source_date=ts)
+                    jobs_count = len(resp.json().get("jobs", []))
+                    log.info("    Stored snapshot with %d jobs", jobs_count)
                     break
-
-            if data is None:
+            else:
                 log.warning("    Could not get JSON, skipping")
-                continue
-            jobs = data.get("jobs", [])
-            log.info("    Found %d jobs in snapshot", len(jobs))
-
-            for job in jobs:
-                fields = _extract_job_fields(job, board)
-                jid = fields["job_id"]
-                if not jid:
-                    continue
-
-                content_html = fields["content_html"] or ""
-                salary_block = extract_salary_block_from_html(content_html)
-                parsed = parse_salary_text(salary_block) if salary_block else SalaryParseResult("", None, None, None, None)
-
-                if jid not in all_jobs:
-                    all_jobs[jid] = JobRecord(
-                        job_id=jid,
-                        title=fields["title"],
-                        location=fields["location"],
-                        url=fields["url"],
-                        salary_text=parsed.salary_text or salary_block or "",
-                        currency=parsed.currency or "",
-                        salary_min=parsed.salary_min,
-                        salary_max=parsed.salary_max,
-                        salary_unit=parsed.salary_unit or "",
-                        description_md=content_html,
-                        department=fields["department"],
-                        first_seen=date_str,
-                        last_seen=date_str,
-                        snapshot_url=snapshot_url,
-                    )
-                else:
-                    rec = all_jobs[jid]
-                    if date_str < rec.first_seen:
-                        rec.first_seen = date_str
-                    if date_str > rec.last_seen:
-                        rec.last_seen = date_str
-                    if not rec.salary_min and parsed.salary_min:
-                        rec.salary_text = parsed.salary_text or salary_block or ""
-                        rec.salary_min = parsed.salary_min
-                        rec.salary_max = parsed.salary_max
-                        rec.currency = parsed.currency or ""
-                        rec.salary_unit = parsed.salary_unit or ""
-                    if not rec.description_md and content_html:
-                        rec.description_md = content_html
 
         except Exception as e:
-            log.warning("    Failed to parse snapshot: %s", e)
-            continue
+            log.warning("    Failed to fetch snapshot: %s", e)
 
         time.sleep(REQUEST_DELAY)
 
-    records = list(all_jobs.values())
-    mark_active_jobs(records, current_csv)
-
-    log.info("API snapshots: %d unique jobs across %d snapshots", len(records), len(results))
-    return records
+    log.info("Stored %d API snapshots to copper for %s/%s", len(results), board, company)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Scrape historical job postings from the Wayback Machine")
     ap.add_argument("--board", required=True, choices=["greenhouse", "ashby"])
     ap.add_argument("--company", required=True, help="Company slug")
-    ap.add_argument("--out", default=None, help="Output CSV path")
     args = ap.parse_args()
 
-    out_path = Path(args.out or f"{args.company}_salaries_historical.csv")
-    current_csv = Path(f"{args.company}_salaries.csv")
-
-    records = scrape_api_snapshots(args.board, args.company, current_csv)
-
-    # Write output
-    write_csv(records, out_path)
-
-    # Summary
-    total = len(records)
-    with_salary = sum(1 for r in records if r.salary_min)
-    active = sum(1 for r in records if r.is_active)
-    closed = total - active
-    log.info("=" * 60)
-    log.info("SUMMARY")
-    log.info("  Total unique jobs: %d", total)
-    log.info("  With salary data:  %d", with_salary)
-    log.info("  Currently active:  %d", active)
-    log.info("  Closed/filled:     %d", closed)
-    log.info("=" * 60)
+    scrape_api_snapshots(args.board, args.company)
+    log.info("Done.")
 
 
 if __name__ == "__main__":
