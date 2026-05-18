@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_url ON snapshots(url);
 
 
 def open_db(board: str, base_dir: str = "copper") -> sqlite3.Connection:
-    Path(base_dir).mkdir(exist_ok=True)
+    Path(base_dir).mkdir(parents=True, exist_ok=True)
     path = str(Path(base_dir) / f"{board}.db")
     conn = sqlite3.connect(path)
     conn.executescript(_SCHEMA)

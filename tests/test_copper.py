@@ -39,3 +39,24 @@ def test_adhoc_db_supported(tmp_path):
     copper.store(db, url="https://jobs.lever.co/acme/abc",
                  http_status=200, content="<html/>", source_date="20250101")
     assert copper.get_content(db, "https://jobs.lever.co/acme/abc", "20250101") == "<html/>"
+
+def test_http_status_stored(tmp_path):
+    db = copper.open_db("ashby", base_dir=str(tmp_path))
+    copper.store(db, url="https://x.com/404", http_status=404,
+                 content="", source_date="20250101")
+    row = db.execute(
+        "SELECT http_status FROM snapshots WHERE url='https://x.com/404'"
+    ).fetchone()
+    assert row["http_status"] == 404
+
+def test_duplicate_preserves_all_columns(tmp_path):
+    db = copper.open_db("ashby", base_dir=str(tmp_path))
+    copper.store(db, url="https://x.com/1", http_status=200,
+                 content="original", source_date="20250101")
+    copper.store(db, url="https://x.com/1", http_status=404,
+                 content="overwrite attempt", source_date="20250101")
+    row = db.execute(
+        "SELECT content, http_status FROM snapshots WHERE url='https://x.com/1'"
+    ).fetchone()
+    assert row["content"] == "original"
+    assert row["http_status"] == 200
