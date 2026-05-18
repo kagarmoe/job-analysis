@@ -10,8 +10,11 @@ copper_id is a FK reference to the copper layer record for this job.
 """
 
 import sqlite3
+import re as _re
+import json as _json
 from datetime import datetime, timezone
 from pathlib import Path
+from classify import parse_json_ld_job_posting as _parse_jld
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -74,3 +77,65 @@ def store(conn: sqlite3.Connection, *, company: str, board: str, job_id: str,
          original_url, http_status, content, copper_id),
     )
     conn.commit()
+
+
+_ASHBY_JOB_URL_RE = _re.compile(
+    r"jobs\.ashbyhq\.com/([^/]+)"
+    r"/([0-9a-zA-Z][0-9a-zA-Z\-]+)"
+    r"(/application)?$",
+)
+_ASHBY_API_BOARD_RE = _re.compile(
+    r"api\.ashbyhq\.com/posting-api/job-board/([^/]+)$"
+)
+
+
+def derive_ashby(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connection,
+                 company: str) -> int:
+    """Derive per-job bronze records from copper for an Ashby company."""
+    rows = copper_conn.execute(
+        "SELECT id, url, content, source_date FROM snapshots "
+        "WHERE url LIKE ? OR url LIKE ?",
+        (f"%jobs.ashbyhq.com/{company}/%",
+         f"%api.ashbyhq.com/posting-api/job-board/{company}%"),
+    ).fetchall()
+
+    count = 0
+    for row in rows:
+        url = row["url"]
+        content = row["content"] or ""
+
+        # Board-level API response: split into per-job api_board records
+        if _ASHBY_API_BOARD_RE.search(url):
+            try:
+                jobs = _json.loads(content).get("jobs", [])
+            except Exception:
+                continue
+            for job in jobs:
+                jid = str(job.get("id", ""))
+                if not jid:
+                    continue
+                store(bronze_conn, company=company, board="ashby", job_id=jid,
+                      page_type="api_board", source_date=row["source_date"],
+                      original_url=url, http_status=200,
+                      content=_json.dumps(job), copper_id=row["id"])
+                count += 1
+            continue
+
+        # Individual job page or /application page
+        m = _ASHBY_JOB_URL_RE.search(url)
+        if not m:
+            continue
+        job_id = m.group(2)
+        is_application = bool(m.group(3))
+        page_type = "application" if is_application else "job_page"
+
+        if is_application and content:
+            jld = _parse_jld(content)
+            content = _json.dumps(jld) if jld else content
+
+        store(bronze_conn, company=company, board="ashby", job_id=job_id,
+              page_type=page_type, source_date=row["source_date"],
+              original_url=url, http_status=200, content=content,
+              copper_id=row["id"])
+        count += 1
+    return count
