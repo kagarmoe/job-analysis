@@ -78,7 +78,6 @@ def main() -> None:
 
     out_path = args.out or f"{args.company}_salaries.csv"
 
-    import copper as _copper
     jobs, source_date, _copper_db = scrape_all_jobs(args.company)
 
     fieldnames = [
