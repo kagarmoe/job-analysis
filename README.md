@@ -11,7 +11,7 @@ python run_pipeline.py <job_posting_url>
 Example:
 
 ```bash
-python run_pipeline.py https://jobs.ashbyhq.com/Crusoe/2689707b-7314-4246-ac95-1e6466970ba3
+python run_pipeline.py https://jobs.ashbyhq.com/<company>/<job_id>
 ```
 
 This single command:
@@ -37,10 +37,10 @@ Copper  →  Bronze  →  Silver  →  Gold
 
 ## Supported Job Boards
 
-| Board | URL Pattern | Example |
-|---|---|---|
-| Ashby | `jobs.ashbyhq.com/{company}/{job_id}` | Crusoe, etc. |
-| Greenhouse | `job-boards.greenhouse.io/{company}/jobs/{job_id}` | Anthropic, etc. |
+| Board | URL Pattern 
+|---|---|
+| Ashby | `jobs.ashbyhq.com/<company>/<job_id>`
+| Greenhouse | `job-boards.greenhouse.io/<company>/jobs/<job_id>` 
 
 ## Analysis Notebooks
 
@@ -66,7 +66,9 @@ Comparables are found by matching on normalized department + similar scope score
 
 ## Setup
 
-Requires Python 3.10+ and a Jupyter kernel named `job-analysis`.
+Requires Python 3.10+ and a Jupyter kernel. I named my kernel "job-analysis", which may or may not be hard-coded somewhere. 
+There is no upstream "job-analysis" kernel, it's a decision that I made somewhere along the way.
+It may, or may not, be a problem. YMMV.
 
 ```bash
 python -m venv .venv
@@ -98,6 +100,10 @@ Scrapers can also be run standalone (writes copper only, no CSV):
 ```bash
 python scrape_ashby.py --company pinecone
 python scrape_greenhouse.py --company anthropic
+
+# Historical jobs (Wayback Machine)
+python scrape_wayback.py --board greenhouse --company <company>
+python scrape_wayback.py --board ashby --company <company>
 ```
 
 Re-derive bronze from existing copper (no network required):
