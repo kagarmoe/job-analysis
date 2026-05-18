@@ -3,7 +3,7 @@
 Scrape salary ranges from an Ashby job board and export to CSV.
 
 Usage:
-  python scrape_ashby.py --company crusoe --out crusoe_salaries.csv
+  python scrape_ashby.py --company pinecone --out pinecone_salaries.csv
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ from classify import (
     SalaryParseResult,
     extract_salary_block_from_html,
     parse_salary_text,
+    parse_json_ld_job_posting,
     classify_seniority,
     classify_work_mode,
     normalize_department,
@@ -49,14 +50,21 @@ def _html_to_markdown(content_html: str) -> str:
     return md
 
 
-def scrape_all_jobs(company: str) -> List[Dict[str, Any]]:
+def scrape_all_jobs(company: str) -> tuple[list[dict], str]:
+    """Returns (jobs, source_date). source_date = today as YYYYMMDD."""
+    import copper as _copper
+    from datetime import date
     url = f"https://api.ashbyhq.com/posting-api/job-board/{company}"
     log.info("Fetching all jobs from Ashby API for %s ...", company)
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
+    source_date = date.today().strftime("%Y%m%d")
+    db = _copper.open_db("ashby")
+    _copper.store(db, url=url, http_status=resp.status_code,
+                  content=resp.text, source_date=source_date)
     jobs = resp.json().get("jobs", [])
     log.info("Fetched %d jobs", len(jobs))
-    return jobs
+    return jobs, source_date
 
 
 def main() -> None:
@@ -66,7 +74,10 @@ def main() -> None:
     args = ap.parse_args()
 
     out_path = args.out or f"{args.company}_salaries.csv"
-    jobs = scrape_all_jobs(args.company)
+    jobs, source_date = scrape_all_jobs(args.company)
+
+    import copper as _copper
+    _copper_db = _copper.open_db("ashby")
 
     fieldnames = [
         "job_id",
@@ -108,6 +119,31 @@ def main() -> None:
 
         salary_block = extract_salary_block_from_html(content_html or "")
         parsed = parse_salary_text(salary_block) if salary_block else SalaryParseResult("", None, None, None, None)
+
+        # Ashby sometimes omits salary from descriptionHtml but includes it as
+        # schema.org baseSalary on the /application page.
+        if parsed.salary_min is None and job.get("applyUrl"):
+            try:
+                app_resp = requests.get(job["applyUrl"], timeout=15)
+                if app_resp.status_code == 200:
+                    pub = job.get("publishedAt", "")
+                    app_source_date = pub[:10].replace("-", "") if pub else source_date
+                    _copper.store(_copper_db, url=job["applyUrl"], http_status=app_resp.status_code,
+                                  content=app_resp.text, source_date=app_source_date)
+                    jld = parse_json_ld_job_posting(app_resp.text)
+                    if jld.get("salary_min"):
+                        parsed = SalaryParseResult(
+                            salary_text=jld["salary_text"],
+                            currency=jld["currency"] or None,
+                            salary_min=int(jld["salary_min"]),
+                            salary_max=int(jld["salary_max"]) if jld.get("salary_max") else None,
+                            salary_unit=jld["salary_unit"] or None,
+                        )
+                        log.info("  salary from /application page: %s–%s %s",
+                                 jld["salary_min"], jld["salary_max"], jld["currency"])
+            except Exception as e:
+                log.warning("  /application fetch failed for %s: %s", job.get("id"), e)
+
         description_md = _html_to_markdown(content_html or "")
 
         rows.append(
