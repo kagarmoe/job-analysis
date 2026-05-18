@@ -18,6 +18,7 @@ import html as _html
 import json
 import logging
 import re
+import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -240,7 +241,7 @@ def _fetch_snapshot(
     return None, ""
 
 
-def _scrape_ashby_individual_fallback(company: str, current_csv: Path) -> list[JobRecord]:
+def _scrape_ashby_individual_fallback(company: str) -> list[JobRecord]:
     """
     Fallback for Ashby boards where the board-level API was never archived.
 
@@ -335,6 +336,8 @@ def scrape_api_snapshots(board: str, company: str, current_csv: Path) -> list[Jo
     JSON-LD (which carries clean baseSalary structured data), then stubs.
     """
 
+    copper_db = copper.open_db(board)
+
     if board == "ashby":
         api_url = f"api.ashbyhq.com/posting-api/job-board/{company}"
     else:
@@ -361,11 +364,10 @@ def scrape_api_snapshots(board: str, company: str, current_csv: Path) -> list[Jo
     if not results:
         if board == "ashby":
             log.info("No board-level API snapshots; trying individual job fallback")
-            return _scrape_ashby_individual_fallback(company, current_csv)
+            return _scrape_ashby_individual_fallback(company)
         return []
 
     all_jobs: dict[str, JobRecord] = {}
-    copper_db = copper.open_db(board)
 
     for i, row in enumerate(results):
         ts = row["timestamp"]
