@@ -31,9 +31,8 @@ def test_greenhouse_url():
     }
 
 
-def test_invalid_url():
-    try:
-        parse_job_url("https://linkedin.com/jobs/12345")
-        assert False, "Should have raised"
-    except ValueError:
-        pass
+def test_unknown_board_routes_to_adhoc():
+    result = parse_job_url("https://linkedin.com/jobs/12345")
+    assert result["board"] == "adhoc"
+    assert result["company"] == "linkedin"
+    assert result["job_id"] == "12345"

@@ -44,7 +44,11 @@ def parse_job_url(url: str) -> dict:
                 "job_id": m.group(2),
             }
 
-    raise ValueError(f"Unsupported job board URL: {url}")
+    # Unknown board — route to adhoc
+    parts = path.strip("/").split("/")
+    job_id = parts[-1] if parts else path.replace("/", "-")
+    company = (parsed.hostname or "").split(".")[0]
+    return {"board": "adhoc", "company": company, "job_id": job_id}
 
 
 logging.basicConfig(
@@ -57,38 +61,55 @@ log = logging.getLogger(__name__)
 KERNEL_NAME = "job-analysis"
 
 
-def run_scraper(board: str, company: str) -> Path:
-    """Run the appropriate scraper. Returns path to output CSV."""
-    out_csv = Path(f"{company}_salaries.csv")
+def scrape_adhoc(url: str, company: str, job_id: str) -> None:
+    """Fetch a single job page from an unknown board and store to copper/adhoc."""
+    import copper as _copper, requests
+    from datetime import date
+    db = _copper.open_db("adhoc")
+    source_date = date.today().strftime("%Y%m%d")
+    log.info("Fetching adhoc job: %s", url)
+    resp = requests.get(url, timeout=30, headers={"User-Agent": "JobBoardResearch/1.0"})
+    resp.raise_for_status()
+    _copper.store(db, url=url, http_status=resp.status_code,
+                  content=resp.text, source_date=source_date)
+    log.info("Stored adhoc page to copper/adhoc.db")
+
+
+def run_bronze_derivation(board: str, company: str, job_id: str = "") -> None:
+    import copper as _copper, bronze as _bronze
+    copper_db = _copper.open_db(board)
+    bronze_db = _bronze.open_db(board)
     if board == "ashby":
-        cmd = [sys.executable, "scrape_ashby.py", "--company", company, "--out", str(out_csv)]
+        count = _bronze.derive_ashby(copper_db, bronze_db, company)
     elif board == "greenhouse":
-        cmd = [sys.executable, "scrape_greenhouse.py", "--company", company, "--out", str(out_csv)]
+        count = _bronze.derive_greenhouse(copper_db, bronze_db, company)
+    else:  # adhoc
+        count = _bronze.derive_adhoc(copper_db, bronze_db, company, job_id)
+    log.info("Bronze derivation: %d records for %s/%s", count, board, company)
+
+
+def run_scraper(board: str, company: str) -> None:
+    """Run the appropriate scraper for the given board."""
+    if board == "ashby":
+        cmd = [sys.executable, "scrape_ashby.py", "--company", company]
+    elif board == "greenhouse":
+        cmd = [sys.executable, "scrape_greenhouse.py", "--company", company]
     else:
-        raise ValueError(f"Unknown board: {board}")
+        log.warning("run_scraper called for unsupported board %r — skipping", board)
+        return
 
     log.info("Scraping current jobs: %s", " ".join(cmd))
     subprocess.run(cmd, check=True)
-    return out_csv
 
 
-def run_wayback(board: str, company: str) -> Path | None:
-    """Run wayback scraper if historical CSV doesn't exist for this company."""
-    hist_csv = Path(f"{company}_salaries_historical.csv")
-    if hist_csv.exists():
-        log.info("Historical data exists: %s (skipping wayback)", hist_csv)
-        return hist_csv
-
-    log.info("No historical data for %s — running wayback scraper...", company)
-    cmd = [sys.executable, "scrape_wayback.py", "--board", board, "--company", company,
-           "--out", str(hist_csv)]
+def run_wayback(board: str, company: str) -> None:
+    """Run wayback scraper to populate copper/bronze with historical snapshots."""
+    log.info("Running wayback scraper for %s/%s...", board, company)
+    cmd = [sys.executable, "scrape_wayback.py", "--board", board, "--company", company]
     try:
         subprocess.run(cmd, check=True)
-        if hist_csv.exists():
-            return hist_csv
     except subprocess.CalledProcessError:
         log.warning("Wayback scraper failed — continuing without historical data")
-    return None
 
 
 def inject_notebook_config(notebook_path: str, replacements: dict) -> str:
@@ -100,13 +121,19 @@ def inject_notebook_config(notebook_path: str, replacements: dict) -> str:
             source = cell["source"] if isinstance(cell["source"], str) else "".join(cell["source"])
             for var_name, value in replacements.items():
                 # Replace any existing value for this variable: VAR = "..." -> VAR = "new"
-                source = re.sub(
-                    rf'^({re.escape(var_name)}\s*=\s*)"[^"]*"',
+                new_source, n = re.subn(
+                    rf'^({re.escape(var_name)}\s*=\s*)["\'][^"\']*["\']',
                     rf'\1"{value}"',
                     source,
                     count=1,
                     flags=re.MULTILINE,
                 )
+                if n == 0:
+                    raise RuntimeError(
+                        f"Could not inject {var_name!r} into {notebook_path} — "
+                        f"no assignment found matching the pattern"
+                    )
+                source = new_source
             cell["source"] = source
             break  # only modify first code cell
 
@@ -138,24 +165,33 @@ def run_notebook(notebook_path: str, output_label: str) -> bool:
         return False
 
 
-def print_summary(csv_path: str, job_id: str):
-    """Print a quick text summary."""
-    import csv as csv_mod
-    with open(csv_path) as f:
-        rows = list(csv_mod.DictReader(f))
-    target = next((r for r in rows if str(r["job_id"]) == job_id), None)
-    if not target:
-        log.warning("Could not find job %s in %s for summary", job_id, csv_path)
+def print_summary(company: str, board: str, job_id: str) -> None:
+    import sqlite3 as _sqlite3
+    try:
+        conn = _sqlite3.connect("silver/jobs.db")
+        conn.row_factory = _sqlite3.Row
+        target = conn.execute(
+            "SELECT * FROM jobs WHERE company=? AND board=? AND job_id=?"
+            " ORDER BY source_date DESC LIMIT 1",
+            (company, board, job_id)
+        ).fetchone()
+        conn.close()
+    except Exception as e:
+        log.warning("Could not query silver for summary: %s", e)
         return
-
+    if not target:
+        log.warning("Job %s not found in silver for summary", job_id)
+        return
     print("\n" + "=" * 60)
     print("PIPELINE SUMMARY")
     print("=" * 60)
     print(f"  Target:     {target['title']}")
-    print(f"  Company:    {Path(csv_path).stem.replace('_salaries', '')}")
-    print(f"  Department: {target.get('department', 'N/A')}")
-    print(f"  Salary:     ${float(target['salary_min']):,.0f} – ${float(target['salary_max']):,.0f}")
-    print(f"  Location:   {target['location']}")
+    print(f"  Company:    {company}")
+    print(f"  Department: {target['department'] or 'N/A'}")
+    sal_min, sal_max = target["salary_min"], target["salary_max"]
+    salary_str = f"${float(sal_min):,.0f} – ${float(sal_max):,.0f}" if sal_min and sal_max else "N/A"
+    print(f"  Salary:     {salary_str}")
+    print(f"  Location:   {target['location'] or 'N/A'}")
     print("=" * 60)
 
 
@@ -168,45 +204,49 @@ def main():
     board, company, job_id = info["board"], info["company"], info["job_id"]
     log.info("Parsed: board=%s company=%s job_id=%s", board, company, job_id)
 
-    # Step 1: Scrape current jobs
-    csv_path = run_scraper(board, company)
+    # Step 1: Scrape → copper
+    if board == "adhoc":
+        scrape_adhoc(args.url, company, job_id)
+    else:
+        run_scraper(board, company)
+        run_wayback(board, company)
 
-    # Step 2: Scrape historical (if needed for this company)
-    hist_path = run_wayback(board, company)
+    # Step 2: Bronze derivation
+    run_bronze_derivation(board, company, job_id)
 
-    # Step 3: Run notebooks
-    results = []
+    # Step 3: Silver ETL
+    nb_config = {"COMPANY": company, "BOARD": board}
+    tmp = inject_notebook_config("silver.ipynb", nb_config)
+    results = [("Silver ETL", run_notebook(tmp, "Silver ETL"))]
+
+    # Step 4: Gold notebooks
 
     # Salary analysis
-    tmp = inject_notebook_config("analyze_salaries.ipynb", {
-        "CSV_PATH": str(csv_path),
-    })
+    tmp = inject_notebook_config("analyze_salaries.ipynb", nb_config)
     results.append(("Salary Analysis", run_notebook(tmp, "Salary Analysis")))
 
     # NLP analysis
-    tmp = inject_notebook_config("analyze_nlp.ipynb", {
-        "CSV_PATH": str(csv_path),
-    })
+    tmp = inject_notebook_config("analyze_nlp.ipynb", nb_config)
     results.append(("NLP Analysis", run_notebook(tmp, "NLP Analysis")))
 
-    # Historical analysis
-    if hist_path:
-        tmp = inject_notebook_config("analyze_historical.ipynb", {
-            "CSV_PATH": str(hist_path),
-        })
+    # Historical analysis: check bronze instead of CSV file
+    import bronze as _bronze
+    _bronze_db = _bronze.open_db(board)
+    has_historical = bool(_bronze_db.execute(
+        "SELECT 1 FROM snapshots WHERE company=? LIMIT 1", (company,)
+    ).fetchone())
+    if has_historical:
+        tmp = inject_notebook_config("analyze_historical.ipynb", nb_config)
         results.append(("Historical Analysis", run_notebook(tmp, "Historical Analysis")))
     else:
         log.info("Skipping historical analysis (no data)")
 
     # Role gap analysis
-    tmp = inject_notebook_config("analyze_role_gap.ipynb", {
-        "JOB_ID": job_id,
-        "CSV_PATH": str(csv_path),
-    })
+    tmp = inject_notebook_config("analyze_role_gap.ipynb", {**nb_config, "JOB_ID": job_id})
     results.append(("Role Gap Analysis", run_notebook(tmp, "Role Gap Analysis")))
 
-    # Step 4: Summary
-    print_summary(str(csv_path), job_id)
+    # Step 5: Summary
+    print_summary(company, board, job_id)
 
     print("\nNotebook Results:")
     for name, ok in results:
