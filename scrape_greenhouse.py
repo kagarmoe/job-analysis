@@ -14,6 +14,7 @@ import csv
 import html
 import logging
 import re
+import sqlite3
 from typing import Any, Dict, List
 
 logging.basicConfig(
@@ -52,14 +53,21 @@ def greenhouse_job_url(company: str, job_id: int) -> str:
     return f"https://job-boards.greenhouse.io/{company}/jobs/{job_id}"
 
 
-def scrape_all_jobs(company: str) -> List[Dict[str, Any]]:
+def scrape_all_jobs(company: str) -> tuple[list[dict], str, sqlite3.Connection]:
+    """Returns (jobs, source_date, db). source_date = today as YYYYMMDD."""
+    import copper as _copper
+    from datetime import date
     url = f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs"
     log.info("Fetching all jobs from Greenhouse API for %s ...", company)
     resp = requests.get(url, params={"content": "true"}, timeout=30)
     resp.raise_for_status()
+    source_date = date.today().strftime("%Y%m%d")
+    db = _copper.open_db("greenhouse")
+    _copper.store(db, url=url, http_status=resp.status_code,
+                  content=resp.text, source_date=source_date)
     jobs = resp.json().get("jobs", [])
     log.info("Fetched %d jobs", len(jobs))
-    return jobs
+    return jobs, source_date, db
 
 
 def main() -> None:
@@ -70,7 +78,8 @@ def main() -> None:
 
     out_path = args.out or f"{args.company}_salaries.csv"
 
-    jobs = scrape_all_jobs(args.company)
+    import copper as _copper
+    jobs, source_date, _copper_db = scrape_all_jobs(args.company)
 
     fieldnames = [
         "job_id",
