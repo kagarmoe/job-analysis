@@ -139,3 +139,34 @@ def derive_ashby(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connectio
               copper_id=row["id"])
         count += 1
     return count
+
+
+_GH_API_RE = _re.compile(r"boards-api\.greenhouse\.io/v1/boards/([^/]+)/jobs")
+
+
+def derive_greenhouse(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connection,
+                      company: str) -> int:
+    """Derive per-job bronze records from copper for a Greenhouse company."""
+    rows = copper_conn.execute(
+        "SELECT id, url, content, source_date FROM snapshots WHERE url LIKE ?",
+        (f"%greenhouse.io%boards/{company}%",),
+    ).fetchall()
+
+    count = 0
+    for row in rows:
+        if not _GH_API_RE.search(row["url"]):
+            continue
+        try:
+            jobs = _json.loads(row["content"] or "{}").get("jobs", [])
+        except Exception:
+            continue
+        for job in jobs:
+            jid = str(job.get("id", ""))
+            if not jid:
+                continue
+            store(bronze_conn, company=company, board="greenhouse", job_id=jid,
+                  page_type="api_board", source_date=row["source_date"],
+                  original_url=row["url"], http_status=200,
+                  content=_json.dumps(job), copper_id=row["id"])
+            count += 1
+    return count
