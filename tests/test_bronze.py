@@ -150,3 +150,22 @@ def test_derive_adhoc(adhoc_copper_db, adhoc_bronze_db):
                         company="acme", job_id="engineer-role")
     content = bronze.get_content(adhoc_bronze_db, "acme", "engineer-role", "20250101", "job_page")
     assert "<title>Engineer" in content
+
+
+def test_derive_adhoc_exact_url(adhoc_copper_db, adhoc_bronze_db):
+    url = "https://jobs.lever.co/acme/engineer-role"
+    url2 = "https://jobs.lever.co/acme/engineer-role-senior"  # would match substring
+    _copper.store(adhoc_copper_db, url=url, http_status=200,
+                  content="<html>Engineer</html>", source_date="20250101")
+    _copper.store(adhoc_copper_db, url=url2, http_status=200,
+                  content="<html>Senior Eng</html>", source_date="20250101")
+    bronze.derive_adhoc(adhoc_copper_db, adhoc_bronze_db,
+                        company="acme", job_id="engineer-role", url=url)
+    # Only the exact URL match should be derived
+    content = bronze.get_content(adhoc_bronze_db, "acme", "engineer-role", "20250101", "job_page")
+    assert "<html>Engineer</html>" in content
+    # The senior role should NOT have been derived under this job_id
+    row_count = adhoc_bronze_db.execute(
+        "SELECT count(*) FROM snapshots WHERE job_id='engineer-role'"
+    ).fetchone()[0]
+    assert row_count == 1

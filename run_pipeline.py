@@ -121,13 +121,19 @@ def inject_notebook_config(notebook_path: str, replacements: dict) -> str:
             source = cell["source"] if isinstance(cell["source"], str) else "".join(cell["source"])
             for var_name, value in replacements.items():
                 # Replace any existing value for this variable: VAR = "..." -> VAR = "new"
-                source = re.sub(
-                    rf'^({re.escape(var_name)}\s*=\s*)"[^"]*"',
+                new_source, n = re.subn(
+                    rf'^({re.escape(var_name)}\s*=\s*)["\'][^"\']*["\']',
                     rf'\1"{value}"',
                     source,
                     count=1,
                     flags=re.MULTILINE,
                 )
+                if n == 0:
+                    raise RuntimeError(
+                        f"Could not inject {var_name!r} into {notebook_path} — "
+                        f"no assignment found matching the pattern"
+                    )
+                source = new_source
             cell["source"] = source
             break  # only modify first code cell
 
@@ -165,7 +171,8 @@ def print_summary(company: str, board: str, job_id: str) -> None:
         conn = _sqlite3.connect("silver/jobs.db")
         conn.row_factory = _sqlite3.Row
         target = conn.execute(
-            "SELECT * FROM jobs WHERE company=? AND board=? AND job_id=?",
+            "SELECT * FROM jobs WHERE company=? AND board=? AND job_id=?"
+            " ORDER BY source_date DESC LIMIT 1",
             (company, board, job_id)
         ).fetchone()
         conn.close()

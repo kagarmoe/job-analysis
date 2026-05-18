@@ -189,13 +189,20 @@ def derive_greenhouse(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Conn
 
 
 def derive_adhoc(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connection,
-                 company: str, job_id: str) -> int:
-    """Derive a single bronze record for an adhoc (non-Ashby/Greenhouse) job."""
-    rows = copper_conn.execute(
-        "SELECT id, url, content, source_date FROM snapshots "
-        "WHERE url LIKE ? ORDER BY source_date DESC LIMIT 1",
-        (f"%{job_id}%",),
-    ).fetchall()
+                 company: str, job_id: str, url: str = "") -> int:
+    """Derive bronze records for an adhoc job. If url is provided, matches exactly; otherwise falls back to job_id substring match."""
+    if url:
+        rows = copper_conn.execute(
+            "SELECT id, url, content, source_date FROM snapshots "
+            "WHERE url=? ORDER BY source_date",
+            (url,),
+        ).fetchall()
+    else:
+        rows = copper_conn.execute(
+            "SELECT id, url, content, source_date FROM snapshots "
+            "WHERE url LIKE ? ORDER BY source_date",
+            (f"%{job_id}%",),
+        ).fetchall()
     count = 0
     for row in rows:
         store(bronze_conn, company=company, board="adhoc", job_id=job_id,
