@@ -27,7 +27,7 @@ from bs4 import BeautifulSoup
 # ===========================================================================
 
 # Compile once at import time.
-DASH_PATTERN = r"(?:–|—|-|–|—|\s+to\s+|\s+and\s+)"
+DASH_PATTERN = r"(?:–|—|-|\s+to\s+|\s+and\s+)"
 CURRENCY_SYM_1 = r"(?P<sym1>\$|£|€)"
 CURRENCY_SYM_2 = r"(?P<sym2>\$|£|€)"
 NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d+)"
@@ -135,6 +135,8 @@ def extract_salary_block_from_html(content_html: str) -> Optional[str]:
 
 
 def parse_salary_text(block: str) -> SalaryParseResult:
+    if not block:
+        return SalaryParseResult("", None, None, None, None)
     block = normalize_whitespace(html.unescape(block))
 
     # unit
@@ -162,6 +164,8 @@ def parse_salary_text(block: str) -> SalaryParseResult:
         max_val = int(m.group("max").replace(",", ""))
         if not currency:
             currency = {"$": "USD", "€": "EUR", "£": "GBP"}.get(sym)
+        if min_val > max_val:
+            min_val, max_val = max_val, min_val
         return SalaryParseResult(block, currency, min_val, max_val, unit)
 
     # secondary pattern: "131,040–165,000 USD"
@@ -172,6 +176,8 @@ def parse_salary_text(block: str) -> SalaryParseResult:
         max_val = int(m2.group(2).replace(",", ""))
         if not currency and m2.group(3):
             currency = m2.group(3)
+        if min_val > max_val:
+            min_val, max_val = max_val, min_val
         return SalaryParseResult(block, currency, min_val, max_val, unit)
 
     # single amount fallback: "$1,415/per week"
@@ -192,6 +198,8 @@ def parse_json_ld_job_posting(html_content: str) -> Optional[dict]:
     Returns a dict with salary_min, salary_max, currency, salary_unit, salary_text,
     title, and location — or None if nothing useful is found.
     """
+    if not html_content:
+        return None
     soup = BeautifulSoup(html_content, "html.parser")
     result: dict = {}
 
@@ -560,7 +568,7 @@ def open_silver(base_dir: str = "silver") -> sqlite3.Connection:
     try:
         conn.execute("ALTER TABLE jobs ADD COLUMN yoe INTEGER")
         conn.commit()
-    except Exception:
+    except sqlite3.OperationalError:
         pass  # column already exists
     return conn
 

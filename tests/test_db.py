@@ -104,3 +104,32 @@ def test_extract_salary_block_finds_range():
     block = db.extract_salary_block_from_html(html)
     assert block is not None
     assert "150" in block
+
+
+def test_parse_salary_text_none_input():
+    result = db.parse_salary_text(None)
+    assert result.salary_min is None
+
+
+def test_parse_salary_text_swaps_reversed_range():
+    result = db.parse_salary_text("$200,000 – $100,000")
+    assert result.salary_min <= result.salary_max
+
+
+def test_parse_json_ld_none_input():
+    result = db.parse_json_ld_job_posting(None)
+    assert result is None
+
+
+def test_upsert_job_updates_on_conflict(tmp_path):
+    conn = db.open_silver(base_dir=str(tmp_path))
+    db.upsert_job(conn, {
+        "company": "acme", "board": "ashby", "job_id": "j3",
+        "source_date": "20260101", "title": "Engineer",
+    })
+    db.upsert_job(conn, {
+        "company": "acme", "board": "ashby", "job_id": "j3",
+        "source_date": "20260101", "title": "Senior Engineer",
+    })
+    row = conn.execute("SELECT title FROM jobs WHERE job_id='j3'").fetchone()
+    assert row["title"] == "Senior Engineer"
