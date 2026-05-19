@@ -17,9 +17,7 @@ import html as _html
 import json
 import logging
 import re
-import sqlite3
 import time
-from pathlib import Path
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -144,7 +142,7 @@ def _title_from_html(html_text: str) -> str:
 
 
 def _fetch_snapshot(
-    copper_db: "sqlite3.Connection",
+    copper_db,
     job_id: str,
     ts: str,          # CDX timestamp — this IS the source_date
     page_type: str,

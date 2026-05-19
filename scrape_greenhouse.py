@@ -12,15 +12,15 @@ import argparse
 import logging
 from datetime import date
 
+import db
+import requests
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger(__name__)
-
-import db
-import requests
 
 
 def scrape_all_jobs(company: str) -> tuple[list[dict], str]:
