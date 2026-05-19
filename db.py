@@ -275,7 +275,7 @@ CREATE INDEX IF NOT EXISTS idx_url ON snapshots(url);
 def open_copper(board: str, base_dir: str = "copper") -> sqlite3.Connection:
     """Open (or create) the copper DB for a given board."""
     Path(base_dir).mkdir(parents=True, exist_ok=True)
-    path = str(Path(base_dir) / f"copper_{board}.db")
+    path = str(Path(base_dir) / f"{board}.db")
     conn = sqlite3.connect(path)
     conn.executescript(_COPPER_SCHEMA)
     conn.row_factory = sqlite3.Row
@@ -333,7 +333,7 @@ def open_bronze(board: str, base_dir: str = "bronze") -> sqlite3.Connection:
     DB is created at {base_dir}/{board}.db.
     """
     Path(base_dir).mkdir(parents=True, exist_ok=True)
-    path = str(Path(base_dir) / f"bronze_{board}.db")
+    path = str(Path(base_dir) / f"{board}.db")
     conn = sqlite3.connect(path)
     conn.executescript(_BRONZE_SCHEMA)
     conn.row_factory = sqlite3.Row

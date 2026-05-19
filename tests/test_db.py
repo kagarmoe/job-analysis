@@ -39,8 +39,8 @@ def test_store_bronze_idempotent(tmp_path):
 
 
 def test_derive_ashby_board_api(tmp_path):
-    copper_conn = db.open_copper("ashby", base_dir=str(tmp_path))
-    bronze_conn = db.open_bronze("ashby", base_dir=str(tmp_path))
+    copper_conn = db.open_copper("ashby", base_dir=str(tmp_path / "copper"))
+    bronze_conn = db.open_bronze("ashby", base_dir=str(tmp_path / "bronze"))
     jobs_payload = json.dumps({"jobs": [{"id": "aaa-111", "title": "Eng"}]})
     db.store_copper(copper_conn,
                     url="https://api.ashbyhq.com/posting-api/job-board/acme",
