@@ -90,3 +90,30 @@ def test_unknown_department():
 
 def test_other_passthrough():
     assert normalize_department("Other") == "Other"
+
+
+from classify import extract_yoe
+
+
+def test_extract_yoe_plus_pattern():
+    assert extract_yoe("requires 5+ years of experience") == 5
+
+
+def test_extract_yoe_range_hyphen():
+    assert extract_yoe("3-5 years experience preferred") == 3
+
+
+def test_extract_yoe_range_endash():
+    assert extract_yoe("3–5 years of experience") == 3
+
+
+def test_extract_yoe_explicit():
+    assert extract_yoe("5 years of experience required") == 5
+
+
+def test_extract_yoe_no_match():
+    assert extract_yoe("no experience requirement") is None
+
+
+def test_extract_yoe_none_input():
+    assert extract_yoe(None) is None

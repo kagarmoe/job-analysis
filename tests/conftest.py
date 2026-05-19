@@ -19,5 +19,5 @@ def pytest_configure(config):
         # nbconvert may write classify.txt when the kernel name is not "python3"
         txt = out_dir / "classify.txt"
         py = out_dir / "classify.py"
-        if txt.exists() and not py.exists():
-            txt.rename(py)
+        if txt.exists():
+            txt.rename(py)  # always overwrite; keeps classify.py in sync with notebook
