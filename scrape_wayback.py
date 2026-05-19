@@ -151,7 +151,7 @@ def _fetch_snapshot(
     orig_url: str,
 ) -> tuple[str | None, str]:
     """Return (content, wayback_url), reading copper cache first."""
-    cached = db.get_content(copper_db, orig_url, ts)
+    cached = db.get_copper(copper_db, orig_url, ts)
     if cached is not None:
         log.info("    [cached] %s", page_type)
         return cached, f"{WEB_URL}/{ts}id_/{orig_url}"
