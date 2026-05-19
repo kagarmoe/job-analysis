@@ -1,6 +1,7 @@
 """Shared classification utilities for Anthropic job analysis notebooks."""
 
 import html
+import json
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -354,3 +355,72 @@ def parse_salary_text(block: str) -> SalaryParseResult:
         return SalaryParseResult(block, currency, val, val, unit)
 
     return SalaryParseResult(block, currency, None, None, unit)
+
+
+def parse_json_ld_job_posting(html_content: str) -> Optional[dict]:
+    """Extract salary and metadata from an Ashby /application page.
+
+    Tries JSON-LD baseSalary first; falls back to HTML salary block extraction.
+    Returns a dict with salary_min, salary_max, currency, salary_unit, salary_text,
+    title, and location — or None if nothing useful is found.
+    """
+    soup = BeautifulSoup(html_content, "html.parser")
+    result: dict = {}
+
+    description_html: str = ""
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or "")
+        except Exception:
+            continue
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if not isinstance(item, dict) or item.get("@type") != "JobPosting":
+                continue
+            result["title"] = item.get("title", "")
+            loc = item.get("jobLocation")
+            if isinstance(loc, dict):
+                addr = loc.get("address", {})
+                result["location"] = (
+                    addr.get("addressLocality") or addr.get("addressRegion") or ""
+                    if isinstance(addr, dict) else ""
+                )
+            base = item.get("baseSalary", {})
+            if isinstance(base, dict):
+                val = base.get("value", {})
+                if isinstance(val, dict):
+                    mn = val.get("minValue")
+                    mx = val.get("maxValue")
+                    if mn is not None:
+                        result["salary_min"] = float(mn)
+                        result["salary_max"] = float(mx) if mx is not None else float(mn)
+                        result["salary_unit"] = val.get("unitText", "").lower()
+                        result["salary_text"] = (
+                            f"${result['salary_min']:,.0f}–${result['salary_max']:,.0f} "
+                            f"{base.get('currency', '')}"
+                        )
+                if base.get("currency"):
+                    result["currency"] = base["currency"]
+            # Capture description HTML for salary fallback (Ashby embeds HTML here)
+            description_html = item.get("description", "")
+            break  # first JobPosting wins
+
+    # Fallback: salary is in the JSON-LD description field (Ashby embeds HTML there)
+    # or in the visible HTML body. description_html is tried first because get_text()
+    # on the full page won't see content inside <script> tags.
+    if not result.get("salary_min"):
+        for html_fragment in [description_html, html_content]:
+            if not html_fragment:
+                continue
+            sal_block = extract_salary_block_from_html(html_fragment)
+            if sal_block:
+                parsed = parse_salary_text(sal_block)
+                if parsed.salary_min:
+                    result["salary_min"] = parsed.salary_min
+                    result["salary_max"] = parsed.salary_max
+                    result["currency"] = parsed.currency or ""
+                    result["salary_unit"] = parsed.salary_unit or ""
+                    result["salary_text"] = parsed.salary_text or ""
+                    break
+
+    return result if (result.get("title") or result.get("salary_min")) else None
