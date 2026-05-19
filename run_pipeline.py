@@ -222,8 +222,8 @@ def main():
     results.append(("NLP Analysis", run_notebook(tmp, "NLP Analysis")))
 
     # Historical analysis: check bronze instead of CSV file
-    import db as _db_hist
-    _bronze_db = _db_hist.open_bronze(board)
+    import db as _db
+    _bronze_db = _db.open_bronze(board)
     has_historical = bool(_bronze_db.execute(
         "SELECT 1 FROM snapshots WHERE company=? LIMIT 1", (company,)
     ).fetchone())
