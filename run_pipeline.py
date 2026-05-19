@@ -63,29 +63,17 @@ KERNEL_NAME = "job-analysis"
 
 def scrape_adhoc(url: str, company: str, job_id: str) -> None:
     """Fetch a single job page from an unknown board and store to copper/adhoc."""
-    import copper as _copper, requests
+    import db as _db, requests
     from datetime import date
-    db = _copper.open_db("adhoc")
+    copper_db = _db.open_copper("adhoc")
     source_date = date.today().strftime("%Y%m%d")
     log.info("Fetching adhoc job: %s", url)
     resp = requests.get(url, timeout=30, headers={"User-Agent": "JobBoardResearch/1.0"})
     resp.raise_for_status()
-    _copper.store(db, url=url, http_status=resp.status_code,
-                  content=resp.text, source_date=source_date)
+    _db.store_copper(copper_db, url=url, http_status=resp.status_code,
+                     content=resp.text, source_date=source_date)
     log.info("Stored adhoc page to copper/adhoc.db")
 
-
-def run_bronze_derivation(board: str, company: str, job_id: str = "") -> None:
-    import copper as _copper, bronze as _bronze
-    copper_db = _copper.open_db(board)
-    bronze_db = _bronze.open_db(board)
-    if board == "ashby":
-        count = _bronze.derive_ashby(copper_db, bronze_db, company)
-    elif board == "greenhouse":
-        count = _bronze.derive_greenhouse(copper_db, bronze_db, company)
-    else:  # adhoc
-        count = _bronze.derive_adhoc(copper_db, bronze_db, company, job_id)
-    log.info("Bronze derivation: %d records for %s/%s", count, board, company)
 
 
 def run_scraper(board: str, company: str) -> None:
@@ -211,11 +199,15 @@ def main():
         run_scraper(board, company)
         run_wayback(board, company)
 
-    # Step 2: Bronze derivation
-    run_bronze_derivation(board, company, job_id)
+    # Step 2: Bronze derivation via notebook
+    nb_config = {"COMPANY": company, "BOARD": board}
+    tmp_bronze = inject_notebook_config("bronze.ipynb", nb_config)
+    bronze_ok = run_notebook(tmp_bronze, "Bronze ETL")
+    if not bronze_ok:
+        log.error("Bronze ETL failed — aborting pipeline")
+        sys.exit(1)
 
     # Step 3: Silver ETL
-    nb_config = {"COMPANY": company, "BOARD": board}
     tmp = inject_notebook_config("silver.ipynb", nb_config)
     results = [("Silver ETL", run_notebook(tmp, "Silver ETL"))]
 
@@ -230,8 +222,8 @@ def main():
     results.append(("NLP Analysis", run_notebook(tmp, "NLP Analysis")))
 
     # Historical analysis: check bronze instead of CSV file
-    import bronze as _bronze
-    _bronze_db = _bronze.open_db(board)
+    import db as _db
+    _bronze_db = _db.open_bronze(board)
     has_historical = bool(_bronze_db.execute(
         "SELECT 1 FROM snapshots WHERE company=? LIMIT 1", (company,)
     ).fetchone())

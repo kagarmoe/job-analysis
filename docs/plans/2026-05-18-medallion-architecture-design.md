@@ -167,20 +167,56 @@ CREATE TABLE audit_log (
 
 ---
 
-## What Changes
+## Layer-as-Notebook Refactor (2026-05-18 update)
+
+### Approved design decisions
+
+**Files eliminated (go away entirely):**
+- `copper.py`, `bronze.py`, `silver.py`, `classify.py`
+
+**New files:**
+- `db.py` — single importable module: DB schemas, `open_db()`, `store()`, `derive_ashby()`, `derive_greenhouse()`, `upsert_job()`, `log_run()`
+- `copper.ipynb` — documents copper schema, demonstrates scraper write path
+- `bronze.ipynb` — calls `db.derive_ashby()` / `db.derive_greenhouse()` to transform copper → bronze
+- `classify.ipynb` — notebook of all helper functions (salary parsing, department, seniority, work mode, USD conversion, `extract_yoe()`). Other notebooks use `%run classify.ipynb` to bring functions into scope.
+
+**Files merged:**
+- `silver.py` + `silver.ipynb` → single `silver.ipynb`
+
+**Import model:**
+- Scrapers import from `db` only (`open_db`, `store`)
+- `bronze.ipynb`, `silver.ipynb` use `%run classify.ipynb` to load classifiers
+- No `classify.py` is generated; `classify.ipynb` is the source of truth
+- No `importnb` dependency required
+
+### `yoe` column
+
+`extract_yoe(text: str) -> int | None` lives in `classify.ipynb`. Parses phrases like "5+ years", "3–5 years experience" from `description_md`; returns minimum years mentioned or `None`. Silver schema adds `yoe INTEGER`; `silver.ipynb` populates it during bronze → silver ETL.
+
+### `run_pipeline.py` invocation order
+
+```
+1. scrape (unchanged)
+2. nbconvert --execute bronze.ipynb    (copper → bronze)
+3. nbconvert --execute silver.ipynb    (bronze → silver, includes %run classify.ipynb)
+4. nbconvert --execute analyze_*.ipynb (gold, unchanged logic)
+```
+
+All nbconvert calls use `--ExecutePreprocessor.kernel_name=job-analysis`.
+
+### What Changes
 
 | File | Change |
 |------|--------|
-| `scrape_ashby.py` | Writes to copper only — no `classify.py` calls |
-| `scrape_greenhouse.py` | Writes to copper only |
-| `scrape_wayback.py` | Writes to copper only |
-| `bronze.py` | Extended: reads copper → extracts/normalizes → writes bronze |
-| `silver.ipynb` | New: reads bronze → classifies → validates → writes silver |
-| `run_pipeline.py` | Updated to orchestrate copper → bronze → silver → gold |
-| Gold notebooks | `pd.read_csv` → `pd.read_sql` from `silver/jobs.db` |
+| `scrape_ashby.py` | `from db import open_db, store` instead of `from classify import ...` |
+| `scrape_greenhouse.py` | Same |
+| `scrape_wayback.py` | Same |
+| `run_pipeline.py` | Invokes `bronze.ipynb` and `silver.ipynb` via nbconvert before gold |
+| Gold notebooks | Analysis logic unchanged; data already in silver |
 
-## What Stays the Same
+### What Stays the Same
 
-- `classify.py` — all parsing logic unchanged, called from `silver.ipynb`
-- Gold notebook analysis logic — only data source changes
-- `bronze.py` module interface — extended, not replaced
+- All classification logic (moves from `classify.py` to `classify.ipynb`, same code)
+- Gold notebook analysis logic
+- Silver schema (plus new `yoe` column)
+- Copper and bronze schemas

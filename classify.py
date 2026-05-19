@@ -1,14 +1,6 @@
-"""Shared classification utilities for Anthropic job analysis notebooks."""
-
-import html
-import json
 import re
-from dataclasses import dataclass
 from typing import Optional
 
-from bs4 import BeautifulSoup
-
-# Approximate exchange rates as of Feb 2026
 TO_USD = {
     "USD": 1.0,
     "EUR": 1.05,
@@ -17,52 +9,40 @@ TO_USD = {
     "AUD": 0.64,
 }
 
-# Anthropic's actual 16 departments (from anthropic.com/careers/jobs)
-# Rules are ordered most-specific-first; first match wins.
 DEPARTMENT_RULES = [
     ("Technical Program Management",
      r"technical program manage|TPM\b"),
-
     ("Safeguards (Trust & Safety)",
      r"threat (investigat|collect)|account abuse|CBRN"
      r"|safeguards analyst|safeguards.{0,15}(infrastructure|data infra)"
      r"|biological safety|red team engineer.{0,10}safeguards"
      r"|product policy manager|policy manager.{0,20}(harm|cyber|frontier)"
      r"|offensive security research.{0,10}safeguards|scaled abuse"),
-
     ("AI Public Policy & Societal Impacts",
      r"policy|external affairs|geopolitics|national security"
      r"|societal impacts?|research economist"),
-
     ("Communications",
      r"communications (manager|lead|director)|head of.{0,15}communications"),
-
     ("Compute",
      r"data center|compute (capacity|efficiency|platform)"
      r"|transaction manager|research compute|capacity.{0,10}(delivery|efficiency)"),
-
     ("Data Science & Analytics",
      r"analytics data|data (science|analytics)|analytics.{0,5}engineering"),
-
     ("Finance",
      r"finance|accounti?n?g|(?<!\w)tax(?!onom)|payroll|revenue (account|system)"
      r"|deal desk|order management|corporate (development|finance)"
      r"|FP&A|treasury|SOX|billing|government incentive|transfer pricing"),
-
     ("Legal",
      r"counsel|(?<!\w)legal|ediscovery|contracts manager"
      r"|compliance (oversight|lead)|trade compliance|IP legal"),
-
     ("People",
      r"recruit|immigration|administrative business partner"
      r"|internal mobility|people (program|senior)|(?<!\w)HR(?!\w)"
      r"|human resources|onboarding.{0,10}lead"),
-
     ("Marketing & Brand",
      r"marketing|(?<!\w)brand(?!\w)|video (director|producer)"
      r"|social media|event designer|presentation design"
      r"|copy and content|developer community|community lead|GTM narrative"),
-
     ("Sales",
      r"account (executive|coordinator)|solutions? architect"
      r"|customer success|business development|(?<!\w)[BS]DR(?!\w)"
@@ -71,7 +51,6 @@ DEPARTMENT_RULES = [
      r"|GTM (strategy|systems|onboarding)|nonprofit account"
      r"|partner.{0,5}(lead|manager).{0,15}(cloud|system|global|reseller)"
      r"|head of.{0,15}(GTM|solution)"),
-
     ("Security",
      r"application security|IT (support|systems|engineering|audiovisual)"
      r"|platform.{0,10}security|security (engineer|software|GRC|risk|technology)"
@@ -79,11 +58,9 @@ DEPARTMENT_RULES = [
      r"|offensive security(?!.*safeguards)|protective intelligence"
      r"|campus security|access management|customer trust|GRC"
      r"|audiovisual|security development|vulnerability"),
-
     ("Product Management, Support, & Operations",
      r"product (manager|lead|support|operations|management)"
      r"|developer relations|support operations|research product manager"),
-
     ("AI Research & Engineering",
      r"research (engineer|scientist|manager)|machine learning|(?<!\w)ML(?!\w)"
      r"|alignment|interpretability|pre-?training|post.?training"
@@ -92,13 +69,11 @@ DEPARTMENT_RULES = [
      r"|reward model|data operations manager|AI observability"
      r"|developer education|education (labs|platform)|certification content"
      r"|training content|human data|encoding librar"),
-
     ("Software Engineering - Infrastructure",
      r"inference|(?<!\w)systems(?!\w)|sandboxing|networking"
      r"|continuous integration|observability|developer productivity"
      r"|data infrastructure|database|AI reliability|autonomous agent infra"
      r"|accelerator platform"),
-
     ("Engineering & Design - Product",
      r"software engineer|engineering manager|design engineer"
      r"|prompt engineer|model quality|full.?stack"),
@@ -119,29 +94,25 @@ SENIORITY_ORDER = [
     "Staff / Principal", "Lead", "Manager", "Director+",
 ]
 
-# Normalized department taxonomy — 15 common buckets for cross-company analysis.
-# Rules are ordered most-specific-first; first regex match wins.
 NORMALIZED_DEPARTMENT_RULES = [
-    ("Research",          r"\bresearch\b"),
-    ("Manufacturing",     r"\bmanufactur"),
-    ("Design",            r"\bdesign\b"),
-    ("Engineering",       r"\bengineering\b|\bsoftware\b|\bhardware\b|\binfrastructure\b"),
-    ("Product",           r"\bproduct\b"),
-    ("People",            r"\bpeople\b|\brecruit|\bHR\b|\bhuman resources\b"),
-    ("Finance",           r"\bfinance\b|\baccounting\b"),
-    ("Legal",             r"\blegal\b|\bcounsel\b"),
-    ("Sales & BD",        r"\bsales\b|\bbusiness development\b|\b[BS]DR\b|\bBD\b|\bGTM\b|\bgo.to.market\b"),
-    ("Marketing & Comms", r"\bmarketing\b|\bbrand\b|\bcommunication"),
-    ("Public Policy",     r"\bpolicy\b|\bpublic affairs\b|\bsocietal impacts?\b|\bgeopolitics\b"),
+    ("Research",              r"\bresearch\b"),
+    ("Manufacturing",         r"\bmanufactur"),
+    ("Design",                r"\bdesign\b"),
+    ("Engineering",           r"\bengineering\b|\bsoftware\b|\bhardware\b|\binfrastructure\b"),
+    ("Product",               r"\bproduct\b"),
+    ("People",                r"\bpeople\b|\brecruit|\bHR\b|\bhuman resources\b"),
+    ("Finance",               r"\bfinance\b|\baccounting\b"),
+    ("Legal",                 r"\blegal\b|\bcounsel\b"),
+    ("Sales & BD",            r"\bsales\b|\bbusiness development\b|\b[BS]DR\b|\bBD\b|\bGTM\b|\bgo.to.market\b"),
+    ("Marketing & Comms",     r"\bmarketing\b|\bbrand\b|\bcommunication"),
+    ("Public Policy",         r"\bpolicy\b|\bpublic affairs\b|\bsocietal impacts?\b|\bgeopolitics\b"),
     ("Security & Compliance", r"\bsecurity\b|\bsafeguard|\bcompliance\b"),
-    ("IT",                r"\bIT\b|\binformation technology\b"),
-    ("Operations",        r"\boperation|\bcompute\b|\bdata center\b|\bprocurement\b|\breal estate\b|\bsupply chain\b"),
-    ("Other",             r".*"),  # catch-all
+    ("IT",                    r"\bIT\b|\binformation technology\b"),
+    ("Operations",            r"\boperation|\bcompute\b|\bdata center\b|\bprocurement\b|\breal estate\b|\bsupply chain\b"),
+    ("Other",                 r".*"),
 ]
 
-
 def normalize_department(department_raw: str) -> str:
-    """Map a company-specific department name to a normalized 15-bucket taxonomy."""
     if not isinstance(department_raw, str) or not department_raw:
         return "Other"
     for bucket, pattern in NORMALIZED_DEPARTMENT_RULES:
@@ -162,9 +133,8 @@ def classify_department(title: str) -> str:
 def classify_seniority(title: str) -> str:
     if not isinstance(title, str):
         return "Mid-Level"
-    t = title.lower()
     for level, pattern in SENIORITY_RULES:
-        if re.search(pattern, t, re.I):
+        if re.search(pattern, title, re.I):
             return level
     return "Mid-Level"
 
@@ -178,7 +148,6 @@ def classify_work_mode(location: str) -> str:
 
 
 def add_classifications(df):
-    """Add department, seniority, work_mode columns to a dataframe with title/location."""
     df["department"] = df["title"].apply(classify_department)
     df["seniority"] = df["title"].apply(classify_seniority)
     df["work_mode"] = df["location"].apply(classify_work_mode)
@@ -186,241 +155,25 @@ def add_classifications(df):
 
 
 def add_usd_salary(df):
-    """Add rate, min_usd, max_usd, mid_usd columns to a dataframe with currency/salary_min/salary_max."""
     df["rate"] = df["currency"].map(TO_USD)
     df["min_usd"] = df["salary_min"] * df["rate"]
     df["max_usd"] = df["salary_max"] * df["rate"]
     df["mid_usd"] = (df["min_usd"] + df["max_usd"]) / 2
     return df
 
-
-# ---------------------------------------------------------------------------
-# Salary parsing (moved from scrape_anthropic.py for reuse across scrapers)
-# ---------------------------------------------------------------------------
-
-# Compile once at import time.
-DASH_PATTERN = r"(?:\u2013|\u2014|-|–|—|\s+to\s+|\s+and\s+)"
-CURRENCY_SYM_1 = r"(?P<sym1>\$|£|€)"
-CURRENCY_SYM_2 = r"(?P<sym2>\$|£|€)"
-NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d+)"
-UNIT_SUFFIX = r"(?:/\w+)?"  # optional e.g. /hr, /yr
-
-SALARY_RANGE_RE = re.compile(
-    rf"{CURRENCY_SYM_1}\s*(?P<min>{NUMBER}){UNIT_SUFFIX}\s*{DASH_PATTERN}\s*"
-    rf"(?:{CURRENCY_SYM_2}\s*)?(?P<max>{NUMBER}){UNIT_SUFFIX}"
-)
-
-
-@dataclass
-class SalaryParseResult:
-    salary_text: str
-    currency: Optional[str]
-    salary_min: Optional[int]
-    salary_max: Optional[int]
-    salary_unit: Optional[str]  # annual, hourly, monthly, etc.
-
-
-def normalize_whitespace(s: str) -> str:
-    return re.sub(r"\s+", " ", s).strip()
-
-
-def looks_like_salary_text(text: str) -> bool:
-    if not text:
-        return False
-    if SALARY_RANGE_RE.search(text):
-        return True
-    # Some posts mention currency code even if the range is formatted differently
-    return bool(re.search(r"\b(USD|EUR|GBP|CAD|AUD)\b", text))
-
-
-COMPENSATION_SENTENCE_RE = re.compile(
-    r"Compensation will be[^.]*\$[^.]+\.",
+_YOE_RE = re.compile(
+    r"(\d+)\+?\s*(?:\u2013|-|to)\s*(\d+)\s+years?"   # "3-5 years" or "3\u20135 years"
+    r"|(\d+)\+\s*years?"                              # "5+ years"
+    r"|(\d+)\s+years?\s+of\s+experience",              # "5 years of experience"
     re.I,
 )
 
-
-def extract_salary_block_from_html(content_html: str) -> Optional[str]:
-    """
-    Find a salary-ish block from the job HTML content. Returns normalized text or None.
-    """
-    if not content_html:
+def extract_yoe(text: str) -> Optional[int]:
+    """Return minimum years of experience mentioned in text, or None."""
+    if not text:
         return None
-
-    soup = BeautifulSoup(html.unescape(content_html), "html.parser")
-
-    # Fast path: match "Compensation will be paid in the range of $X - $Y" directly
-    plain = normalize_whitespace(soup.get_text(" ", strip=True))
-    m = COMPENSATION_SENTENCE_RE.search(plain)
-    if m:
-        return m.group(0)
-
-    heading_patterns = [
-        re.compile(r"\bAnnual Salary\b", re.I),
-        re.compile(r"\bSalary\b", re.I),
-        re.compile(r"\bCompensation\b", re.I),
-        re.compile(r"\bPay\b", re.I),
-    ]
-
-    candidates = []
-    for tag in soup.find_all(["h1", "h2", "h3", "h4", "strong", "b", "p", "span", "div", "li"]):
-        txt = normalize_whitespace(tag.get_text(" ", strip=True))
-        if not txt:
-            continue
-        if any(p.search(txt) for p in heading_patterns):
-            candidates.append(tag)
-
-    for tag in candidates:
-        parent = tag.parent if tag.parent else tag
-        parent_txt = normalize_whitespace(parent.get_text(" ", strip=True)) if parent else ""
-        if looks_like_salary_text(parent_txt):
-            return parent_txt
-
-        # look at a few next siblings
-        collected = []
-        sib = parent
-        for _ in range(8):
-            sib = sib.find_next_sibling()
-            if sib is None:
-                break
-            t = normalize_whitespace(sib.get_text(" ", strip=True))
-            if t:
-                collected.append(t)
-                joined = " ".join(collected)
-                if looks_like_salary_text(joined):
-                    return joined
-
-    # fallback: scan whole text
-    all_text = normalize_whitespace(soup.get_text(" ", strip=True))
-    m = re.search(r"(Annual Salary|Salary|Compensation).{0,400}", all_text, flags=re.I)
-    if m:
-        window = all_text[m.start() : min(len(all_text), m.start() + 500)]
-        if looks_like_salary_text(window):
-            return window
-
-    mm = SALARY_RANGE_RE.search(all_text)
-    if mm:
-        s = max(0, mm.start() - 80)
-        e = min(len(all_text), mm.end() + 80)
-        return all_text[s:e]
-
-    return None
-
-
-def parse_salary_text(block: str) -> SalaryParseResult:
-    block = normalize_whitespace(html.unescape(block))
-
-    # unit
-    unit = None
-    if re.search(r"\bAnnual\b|\bper year\b|\byearly\b", block, re.I):
-        unit = "annual"
-    elif re.search(r"\bhour\b|\bhourly\b|\bper hour\b|/hr\b", block, re.I):
-        unit = "hourly"
-    elif re.search(r"\bmonth\b|\bmonthly\b|\bper month\b", block, re.I):
-        unit = "monthly"
-    elif re.search(r"\bweek\b|\bweekly\b|\bper week\b", block, re.I):
-        unit = "weekly"
-
-    # currency code
-    currency = None
-    m_code = re.search(r"\b(USD|EUR|GBP|CAD|AUD)\b", block)
-    if m_code:
-        currency = m_code.group(1)
-
-    # numeric range
-    m = SALARY_RANGE_RE.search(block)
-    if m:
-        sym = m.group("sym1")
-        min_val = int(m.group("min").replace(",", ""))
-        max_val = int(m.group("max").replace(",", ""))
-        if not currency:
-            currency = {"$": "USD", "€": "EUR", "£": "GBP"}.get(sym)
-        return SalaryParseResult(block, currency, min_val, max_val, unit)
-
-    # secondary pattern: "131,040–165,000 USD"
-    m2 = re.search(rf"(\d{{1,3}}(?:,\d{{3}})+|\d+)\s*{DASH_PATTERN}\s*(\d{{1,3}}(?:,\d{{3}})+|\d+)\s*(USD|EUR|GBP|CAD|AUD)?",
-                   block)
-    if m2:
-        min_val = int(m2.group(1).replace(",", ""))
-        max_val = int(m2.group(2).replace(",", ""))
-        if not currency and m2.group(3):
-            currency = m2.group(3)
-        return SalaryParseResult(block, currency, min_val, max_val, unit)
-
-    # single amount fallback: "$1,415/per week"
-    m3 = re.search(r"(?P<sym>\$|£|€)\s*(?P<val>\d{1,3}(?:,\d{3})+|\d+)", block)
-    if m3:
-        val = int(m3.group("val").replace(",", ""))
-        if not currency:
-            currency = {"$": "USD", "€": "EUR", "£": "GBP"}.get(m3.group("sym"))
-        return SalaryParseResult(block, currency, val, val, unit)
-
-    return SalaryParseResult(block, currency, None, None, unit)
-
-
-def parse_json_ld_job_posting(html_content: str) -> Optional[dict]:
-    """Extract salary and metadata from an Ashby /application page.
-
-    Tries JSON-LD baseSalary first; falls back to HTML salary block extraction.
-    Returns a dict with salary_min, salary_max, currency, salary_unit, salary_text,
-    title, and location — or None if nothing useful is found.
-    """
-    soup = BeautifulSoup(html_content, "html.parser")
-    result: dict = {}
-
-    description_html: str = ""
-    for script in soup.find_all("script", type="application/ld+json"):
-        try:
-            data = json.loads(script.string or "")
-        except Exception:
-            continue
-        items = data if isinstance(data, list) else [data]
-        for item in items:
-            if not isinstance(item, dict) or item.get("@type") != "JobPosting":
-                continue
-            result["title"] = item.get("title", "")
-            loc = item.get("jobLocation")
-            if isinstance(loc, dict):
-                addr = loc.get("address", {})
-                result["location"] = (
-                    addr.get("addressLocality") or addr.get("addressRegion") or ""
-                    if isinstance(addr, dict) else ""
-                )
-            base = item.get("baseSalary", {})
-            if isinstance(base, dict):
-                val = base.get("value", {})
-                if isinstance(val, dict):
-                    mn = val.get("minValue")
-                    mx = val.get("maxValue")
-                    if mn is not None:
-                        result["salary_min"] = float(mn)
-                        result["salary_max"] = float(mx) if mx is not None else float(mn)
-                        result["salary_unit"] = val.get("unitText", "").lower()
-                        result["salary_text"] = (
-                            f"${result['salary_min']:,.0f}–${result['salary_max']:,.0f} "
-                            f"{base.get('currency', '')}"
-                        )
-                if base.get("currency"):
-                    result["currency"] = base["currency"]
-            # Capture description HTML for salary fallback (Ashby embeds HTML here)
-            description_html = item.get("description", "")
-            break  # first JobPosting wins
-
-    # Fallback: salary is in the JSON-LD description field (Ashby embeds HTML there)
-    # or in the visible HTML body. description_html is tried first because get_text()
-    # on the full page won't see content inside <script> tags.
-    if not result.get("salary_min"):
-        for html_fragment in [description_html, html_content]:
-            if not html_fragment:
-                continue
-            sal_block = extract_salary_block_from_html(html_fragment)
-            if sal_block:
-                parsed = parse_salary_text(sal_block)
-                if parsed.salary_min:
-                    result["salary_min"] = parsed.salary_min
-                    result["salary_max"] = parsed.salary_max
-                    result["currency"] = parsed.currency or ""
-                    result["salary_unit"] = parsed.salary_unit or ""
-                    result["salary_text"] = parsed.salary_text or ""
-                    break
-
-    return result if (result.get("title") or result.get("salary_min")) else None
+    m = _YOE_RE.search(text)
+    if not m:
+        return None
+    groups = [int(g) for g in m.groups() if g is not None]
+    return min(groups) if groups else None

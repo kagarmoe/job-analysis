@@ -9,3 +9,5 @@ __pycache__/
 copper/
 bronze/
 silver/
+classify.py
+classify.txt
