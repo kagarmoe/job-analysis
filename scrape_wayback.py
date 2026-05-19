@@ -25,7 +25,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-import copper
+import db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -151,7 +151,7 @@ def _fetch_snapshot(
     orig_url: str,
 ) -> tuple[str | None, str]:
     """Return (content, wayback_url), reading copper cache first."""
-    cached = copper.get_content(copper_db, orig_url, ts)
+    cached = db.get_content(copper_db, orig_url, ts)
     if cached is not None:
         log.info("    [cached] %s", page_type)
         return cached, f"{WEB_URL}/{ts}id_/{orig_url}"
@@ -162,8 +162,8 @@ def _fetch_snapshot(
             resp = SESSION.get(wayback_url, timeout=60)
             log.info("    HTTP %d (%d bytes) [%s]", resp.status_code, len(resp.content), mode or "plain")
             if resp.status_code == 200:
-                copper.store(copper_db, url=orig_url, http_status=resp.status_code,
-                             content=resp.text, source_date=ts)
+                db.store_copper(copper_db, url=orig_url, http_status=resp.status_code,
+                                content=resp.text, source_date=ts)
                 return resp.text, wayback_url
         except Exception as e:
             log.warning("    fetch error: %s", e)
@@ -178,7 +178,7 @@ def _scrape_ashby_individual_fallback(company: str) -> None:
     Copper write stub — raw fetches are stored to copper; derivation (bronze)
     and job record construction move to later medallion tasks.
     """
-    copper_db = copper.open_db("ashby")
+    copper_db = db.open_copper("ashby")
 
     # --- 1. Single CDX query: job pages + application pages ---
     html_rows = cdx_query(f"jobs.ashbyhq.com/{company}/*", filter="statuscode:200")
@@ -263,7 +263,7 @@ def scrape_api_snapshots(board: str, company: str) -> None:
     was never archived.
     """
 
-    copper_db = copper.open_db(board)
+    copper_db = db.open_copper(board)
 
     if board == "ashby":
         api_url = f"api.ashbyhq.com/posting-api/job-board/{company}"
@@ -312,8 +312,8 @@ def scrape_api_snapshots(board: str, company: str) -> None:
                 if resp.status_code != 200:
                     continue
                 if resp.text.lstrip()[:1] == "{":
-                    copper.store(copper_db, url=url, http_status=resp.status_code,
-                                 content=resp.text, source_date=ts)
+                    db.store_copper(copper_db, url=url, http_status=resp.status_code,
+                                    content=resp.text, source_date=ts)
                     jobs_count = len(resp.json().get("jobs", []))
                     log.info("    Stored snapshot with %d jobs", jobs_count)
                     break
