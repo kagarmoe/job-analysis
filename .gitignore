@@ -6,3 +6,6 @@ __pycache__/
 .wayback_progress*.json
 .pipeline_*.ipynb
 *.csv
+copper/
+bronze/
+silver/
