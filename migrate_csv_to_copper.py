@@ -16,7 +16,7 @@ import logging
 import pathlib
 import sys
 
-import copper
+import db
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -125,15 +125,15 @@ def migrate(source: dict, dry_run: bool = False) -> int:
         log.info("  DRY RUN — not writing to copper")
         return len(jobs)
 
-    db = copper.open_db(source["board"])
-    existing = copper.get_content(db, source["url"], source_date)
+    conn = db.open_copper(source["board"])
+    existing = db.get_copper(conn, source["url"], source_date)
     if existing is not None:
         log.info("  Already in copper — skipping (INSERT OR IGNORE would no-op)")
-        db.close()
+        conn.close()
         return 0
 
-    copper.store(db, url=source["url"], http_status=200, content=content, source_date=source_date)
-    db.close()
+    db.store_copper(conn, url=source["url"], http_status=200, content=content, source_date=source_date)
+    conn.close()
     log.info("  Stored.")
     return len(jobs)
 

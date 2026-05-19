@@ -648,3 +648,83 @@ def log_run(conn: sqlite3.Connection, company: str, board: str,
          rows_processed, rows_upserted, rows_rejected),
     )
     conn.commit()
+
+
+# ===========================================================================
+# 5. Classification utilities (formerly classify.py)
+# ===========================================================================
+
+TO_USD = {
+    "USD": 1.0,
+    "EUR": 1.05,
+    "GBP": 1.27,
+    "CAD": 0.72,
+    "AUD": 0.64,
+}
+
+SENIORITY_ORDER = [
+    "Intern / Fellow", "Junior", "Mid-Level", "Senior",
+    "Staff / Principal", "Lead", "Manager", "Director+",
+]
+
+_NORMALIZED_DEPARTMENT_RULES = [
+    ("Research",              r"\bresearch\b"),
+    ("Manufacturing",         r"\bmanufactur"),
+    ("Design",                r"\bdesign\b"),
+    ("Engineering",           r"\bengineering\b|\bsoftware\b|\bhardware\b|\binfrastructure\b"),
+    ("Product",               r"\bproduct\b"),
+    ("People",                r"\bpeople\b|\brecruit|\bHR\b|\bhuman resources\b"),
+    ("Finance",               r"\bfinance\b|\baccounting\b"),
+    ("Legal",                 r"\blegal\b|\bcounsel\b"),
+    ("Sales & BD",            r"\bsales\b|\bbusiness development\b|\b[BS]DR\b|\bBD\b|\bGTM\b|\bgo.to.market\b"),
+    ("Marketing & Comms",     r"\bmarketing\b|\bbrand\b|\bcommunication"),
+    ("Public Policy",         r"\bpolicy\b|\bpublic affairs\b|\bsocietal impacts?\b|\bgeopolitics\b"),
+    ("Security & Compliance", r"\bsecurity\b|\bsafeguard|\bcompliance\b"),
+    ("IT",                    r"\bIT\b|\binformation technology\b"),
+    ("Operations",            r"\boperation|\bcompute\b|\bdata center\b|\bprocurement\b|\breal estate\b|\bsupply chain\b"),
+    ("Other",                 r".*"),
+]
+
+_YOE_RE = re.compile(
+    r"(\d+)\+?\s*(?:–|-|to)\s*(\d+)\s+years?"   # "3-5 years" or "3–5 years"
+    r"|(\d+)\+\s*years?"                              # "5+ years"
+    r"|(\d+)\s+years?\s+of\s+experience",              # "5 years of experience"
+    re.I,
+)
+
+
+def normalize_department(department_raw: str) -> str:
+    if not isinstance(department_raw, str) or not department_raw:
+        return "Other"
+    for bucket, pattern in _NORMALIZED_DEPARTMENT_RULES:
+        if re.search(pattern, department_raw, re.I):
+            return bucket
+    return "Other"
+
+
+def classify_work_mode(location: str) -> str:
+    if not isinstance(location, str):
+        return "Unknown"
+    if "remote" in location.lower():
+        return "Remote-Friendly"
+    return "Office-Only"
+
+
+def add_usd_salary(df) -> object:
+    """Add min_usd, max_usd, mid_usd columns to a DataFrame in-place."""
+    df["rate"] = df["currency"].map(TO_USD)
+    df["min_usd"] = df["salary_min"] * df["rate"]
+    df["max_usd"] = df["salary_max"] * df["rate"]
+    df["mid_usd"] = (df["min_usd"] + df["max_usd"]) / 2
+    return df
+
+
+def extract_yoe(text: str) -> Optional[int]:
+    """Return minimum years of experience mentioned in text, or None."""
+    if not text:
+        return None
+    m = _YOE_RE.search(text)
+    if not m:
+        return None
+    groups = [int(g) for g in m.groups() if g is not None]
+    return min(groups) if groups else None
