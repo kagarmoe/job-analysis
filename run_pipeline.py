@@ -47,7 +47,8 @@ def parse_job_url(url: str) -> dict:
     # Unknown board — route to adhoc
     parts = path.strip("/").split("/")
     job_id = parts[-1] if parts else path.replace("/", "-")
-    company = (parsed.hostname or "").split(".")[0]
+    hostname = (parsed.hostname or "").removeprefix("www.")
+    company = hostname.split(".")[0]
     return {"board": "adhoc", "company": company, "job_id": job_id}
 
 
@@ -201,7 +202,8 @@ def main():
 
     # Step 2: Bronze derivation via notebook
     nb_config = {"COMPANY": company, "BOARD": board}
-    tmp_bronze = inject_notebook_config("bronze.ipynb", nb_config)
+    bronze_config = {**nb_config, "JOB_ID": job_id if board == "adhoc" else ""}
+    tmp_bronze = inject_notebook_config("bronze.ipynb", bronze_config)
     bronze_ok = run_notebook(tmp_bronze, "Bronze ETL")
     if not bronze_ok:
         log.error("Bronze ETL failed — aborting pipeline")
@@ -213,9 +215,18 @@ def main():
 
     # Step 4: Gold notebooks
 
-    # Salary analysis
-    tmp = inject_notebook_config("analyze_salaries.ipynb", nb_config)
-    results.append(("Salary Analysis", run_notebook(tmp, "Salary Analysis")))
+    # Salary analysis — skip if no salary data in silver
+    import db as _db
+    _silver_db = _db.open_silver()
+    _has_salary = bool(_silver_db.execute(
+        "SELECT 1 FROM jobs WHERE company=? AND board=? AND has_salary=1 LIMIT 1",
+        (company, board)
+    ).fetchone())
+    if _has_salary:
+        tmp = inject_notebook_config("analyze_salaries.ipynb", nb_config)
+        results.append(("Salary Analysis", run_notebook(tmp, "Salary Analysis")))
+    else:
+        log.info("Skipping salary analysis (no salary data found)")
 
     # NLP analysis
     tmp = inject_notebook_config("analyze_nlp.ipynb", nb_config)
