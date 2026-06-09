@@ -113,6 +113,7 @@ Gold notebooks should query `silver/jobs.db`. They should not be required for th
 - `audit_log` should record each silver run.
 - `bronze_id` and `copper_id` should continue to support cross-layer tracing from a silver job back to the raw HTTP response.
 - `docs/database.md` is not deprecated. Treat it as the current database reference and update it whenever schema, table ownership, or query patterns change.
+- `docs/plans/2026-06-09-gold-data-contract-plan.md` defines the required gold analyses and the silver fields needed to support them.
 
 ## Test Contract
 
@@ -195,6 +196,26 @@ python -m pytest tests/test_db.py -q
 
 ```bash
 python -m pytest tests/test_db.py -q
+```
+
+### Task 2b: Preserve Gold Data Contract Tests
+
+**Goal:** Prove copper -> bronze -> silver produces the data required by the gold notebooks.
+
+**Reference:** `docs/plans/2026-06-09-gold-data-contract-plan.md`
+
+**Changes:**
+
+- Add fixture-based tests for salary analysis requirements.
+- Add fixture-based tests for NLP/text analysis requirements.
+- Add fixture-based tests for historical analysis requirements.
+- Add fixture-based tests for role-gap analysis requirements.
+- Add cross-layer trace tests from silver back to bronze and copper.
+
+**Verification:**
+
+```bash
+python -m pytest -q
 ```
 
 ### Task 3: Replace `bronze.ipynb` With `bronze.py`
