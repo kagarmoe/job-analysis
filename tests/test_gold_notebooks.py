@@ -44,6 +44,8 @@ def test_nlp_notebook_uses_shared_gold_helpers():
     assert "def extract_yoe" not in source
     assert "SKILL_KEYWORDS = {" not in source
     assert "EDU_PATTERNS = {" not in source
+    assert "retrying with min_df=1, max_df=1.0" in source
+    assert "TF-IDF unavailable after retry" in source
 
 
 def test_role_gap_notebook_uses_shared_scope_and_yoe_helpers():
@@ -72,3 +74,13 @@ def test_historical_notebook_uses_shared_temporal_helpers():
     assert "sen_status = hist.groupby([\"seniority\", \"is_active\"])" not in source
     assert "hist_salary[\"status\"] = hist_salary[\"is_active\"].map" not in source
     assert "title_counts = hist_salary.groupby(\"title_norm\")" not in source
+    assert "No salary data available - skipping quarterly salary trend charts." in source
+    assert "if qtr_stats.empty:" in source
+
+
+def test_role_gap_notebook_handles_missing_salary_data():
+    source = _notebook_source("analyze_role_gap.ipynb")
+    assert "if df.empty:" in source
+    assert "No salaried roles available for comparable salary analysis." in source
+    assert "No salary ranges available for salary comparison chart." in source
+    assert "No salary data available - skipping scope vs salary scatter." in source
