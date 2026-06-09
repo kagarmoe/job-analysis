@@ -40,10 +40,21 @@ def test_salary_notebook_uses_shared_location_helper_and_generic_labels():
 
 def test_nlp_notebook_uses_shared_gold_helpers():
     source = _notebook_source("analyze_nlp.ipynb")
-    assert "from gold_analysis import SKILL_KEYWORDS, EDU_PATTERNS, extract_required_yoe" in source
+    assert (
+        "from gold_analysis import build_department_skill_matrix, build_education_requirement_summary, build_skill_mention_counts, build_yoe_dataset, summarize_yoe_by_department"
+        in source
+    )
     assert "def extract_yoe" not in source
     assert "SKILL_KEYWORDS = {" not in source
     assert "EDU_PATTERNS = {" not in source
+    assert "skill_counts = {}" not in source
+    assert "for skill, pattern in SKILL_KEYWORDS.items()" not in source
+    assert "dept_skill_matrix = pd.DataFrame" not in source
+    assert "df_nlp[\"yoe\"] = df_nlp[\"description_md\"].apply(extract_required_yoe)" not in source
+    assert "dept_yoe = df_nlp_yoe.groupby(\"department\")[\"yoe\"].agg" not in source
+    assert "edu_counts = {}" not in source
+    assert "for label, pattern in EDU_PATTERNS.items()" not in source
+    assert "edu_dept = pd.DataFrame" not in source
     assert "retrying with min_df=1, max_df=1.0" in source
     assert "TF-IDF unavailable after retry" in source
 

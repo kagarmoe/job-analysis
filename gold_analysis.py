@@ -125,6 +125,119 @@ def extract_required_yoe(text: object) -> int | None:
     return max(minimums) if minimums else None
 
 
+def build_skill_mention_counts(
+    df: pd.DataFrame,
+    *,
+    skill_patterns: dict[str, str] = SKILL_KEYWORDS,
+    text_col: str = "description_md",
+) -> pd.Series:
+    """Count roles whose descriptions mention each skill pattern."""
+    counts = {}
+    descriptions = df[text_col] if text_col in df.columns else pd.Series(dtype=object)
+    for skill, pattern in skill_patterns.items():
+        count = int(descriptions.str.contains(pattern, flags=re.I, na=False).sum())
+        if count > 0:
+            counts[skill] = count
+    return pd.Series(counts, dtype=int).sort_index().sort_values(
+        ascending=False, kind="stable"
+    )
+
+
+def build_department_skill_matrix(
+    df: pd.DataFrame,
+    skills: list[str],
+    *,
+    skill_patterns: dict[str, str] = SKILL_KEYWORDS,
+    text_col: str = "description_md",
+    department_col: str = "department",
+    exclude_department: str = "Other",
+) -> pd.DataFrame:
+    """Build department x skill percentages for descriptions mentioning each skill."""
+    if not skills or text_col not in df.columns or department_col not in df.columns:
+        return pd.DataFrame()
+
+    df_with_desc = df.dropna(subset=[text_col])
+    if df_with_desc.empty:
+        return pd.DataFrame()
+
+    departments = [
+        department
+        for department in df[department_col].value_counts().index
+        if department != exclude_department
+    ]
+    matrix = pd.DataFrame(index=departments, columns=skills, dtype=float)
+    for department in departments:
+        dept_descs = df.loc[df[department_col] == department, text_col]
+        n_dept = len(dept_descs)
+        for skill in skills:
+            pattern = skill_patterns[skill]
+            count = dept_descs.str.contains(pattern, flags=re.I, na=False).sum()
+            matrix.loc[department, skill] = count / n_dept * 100 if n_dept > 0 else 0
+    return matrix
+
+
+def build_yoe_dataset(df: pd.DataFrame, *, text_col: str = "description_md") -> pd.DataFrame:
+    """Return a copy of jobs with parsed years-of-experience requirements."""
+    yoe_df = df.copy()
+    descriptions = (
+        yoe_df[text_col]
+        if text_col in yoe_df.columns
+        else pd.Series(index=yoe_df.index, dtype=object)
+    )
+    yoe_df["yoe"] = descriptions.apply(extract_required_yoe)
+    return yoe_df
+
+
+def summarize_yoe_by_department(
+    df_yoe: pd.DataFrame,
+    *,
+    min_count: int = 3,
+    department_col: str = "department",
+) -> pd.DataFrame:
+    """Summarize parseable YoE requirements by department."""
+    if df_yoe.empty or "yoe" not in df_yoe.columns or department_col not in df_yoe.columns:
+        return pd.DataFrame(columns=["median", "mean", "count"])
+
+    dept_yoe = df_yoe.groupby(department_col)["yoe"].agg(["median", "mean", "count"])
+    return dept_yoe[dept_yoe["count"] >= min_count].sort_values("median", ascending=False)
+
+
+def build_education_requirement_summary(
+    df: pd.DataFrame,
+    *,
+    education_patterns: dict[str, str] = EDU_PATTERNS,
+    text_col: str = "description_md",
+    department_col: str = "department",
+    exclude_department: str = "Other",
+) -> tuple[pd.Series, pd.DataFrame]:
+    """Build overall and department-level education requirement mention summaries."""
+    descriptions = df[text_col] if text_col in df.columns else pd.Series(dtype=object)
+    counts = {
+        label: int(descriptions.str.contains(pattern, flags=re.I, na=False).sum())
+        for label, pattern in education_patterns.items()
+    }
+    edu_series = pd.Series(counts, dtype=int).sort_index().sort_values(
+        ascending=False, kind="stable"
+    )
+
+    if department_col not in df.columns or text_col not in df.columns:
+        return edu_series, pd.DataFrame(columns=edu_series.index)
+
+    departments = [
+        department
+        for department in df[department_col].value_counts().index
+        if department != exclude_department
+    ]
+    edu_dept = pd.DataFrame(index=departments, columns=edu_series.index, dtype=float)
+    for department in departments:
+        dept_descs = df.loc[df[department_col] == department, text_col]
+        for label in edu_series.index:
+            pattern = education_patterns[label]
+            count = dept_descs.str.contains(pattern, flags=re.I, na=False).sum()
+            edu_dept.loc[department, label] = count / len(dept_descs) * 100 if len(dept_descs) > 0 else 0
+    return edu_series, edu_dept
+
+
 def score_scope(description: object) -> int:
     """Score role ownership/scope from 0-10 using heuristic language cues."""
     if not isinstance(description, str):

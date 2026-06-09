@@ -4,16 +4,21 @@ from gold_analysis import (
     build_active_role_timeseries,
     build_active_closed_comparison,
     build_department_quarterly_salary_trends,
+    build_department_skill_matrix,
+    build_education_requirement_summary,
     build_historical_dataset,
     build_monthly_hiring_activity,
     build_quarterly_salary_stats,
     build_skill_overlap_matrix,
+    build_skill_mention_counts,
     build_time_to_fill_dataset,
+    build_yoe_dataset,
     extract_required_yoe,
     extract_skill_phrases,
     score_scope,
     select_role_gap_comparables,
     split_locations,
+    summarize_yoe_by_department,
     summarize_recurring_roles,
 )
 
@@ -38,6 +43,104 @@ def test_extract_required_yoe_uses_highest_minimum_requirement():
 
 def test_extract_required_yoe_rejects_out_of_range_values():
     assert extract_required_yoe("Requires 30+ years of experience.") is None
+
+
+def test_build_skill_mention_counts_counts_matching_descriptions_once_per_role():
+    jobs = pd.DataFrame(
+        [
+            {"description_md": "Python Python and SQL", "department": "Engineering"},
+            {"description_md": "Java services", "department": "Engineering"},
+            {"description_md": "No listed tools", "department": "Product"},
+            {"description_md": None, "department": "Product"},
+        ]
+    )
+
+    counts = build_skill_mention_counts(
+        jobs,
+        skill_patterns={
+            "Python": r"\bPython\b",
+            "SQL": r"\bSQL\b",
+            "Java": r"\bJava\b",
+            "Rust": r"\bRust\b",
+        },
+    )
+
+    assert counts.to_dict() == {"Java": 1, "Python": 1, "SQL": 1}
+
+
+def test_build_department_skill_matrix_returns_department_percentages():
+    jobs = pd.DataFrame(
+        [
+            {"description_md": "Python and SQL", "department": "Engineering"},
+            {"description_md": "Python", "department": "Engineering"},
+            {"description_md": "SQL", "department": "Product"},
+            {"description_md": None, "department": "Product"},
+            {"description_md": "Python", "department": "Other"},
+        ]
+    )
+
+    matrix = build_department_skill_matrix(
+        jobs,
+        ["Python", "SQL"],
+        skill_patterns={"Python": r"\bPython\b", "SQL": r"\bSQL\b"},
+    )
+
+    assert list(matrix.index) == ["Engineering", "Product"]
+    assert list(matrix.columns) == ["Python", "SQL"]
+    assert matrix.loc["Engineering", "Python"] == 100
+    assert matrix.loc["Engineering", "SQL"] == 50
+    assert matrix.loc["Product", "Python"] == 0
+    assert matrix.loc["Product", "SQL"] == 50
+
+
+def test_build_yoe_dataset_and_department_summary():
+    jobs = pd.DataFrame(
+        [
+            {"description_md": "Requires 3+ years of experience", "department": "Engineering"},
+            {"description_md": "Requires 5+ years of experience", "department": "Engineering"},
+            {"description_md": "Requires 7+ years of experience", "department": "Engineering"},
+            {"description_md": "Requires 2+ years of experience", "department": "Product"},
+            {"description_md": "No explicit requirement", "department": "Product"},
+        ]
+    )
+
+    with_yoe = build_yoe_dataset(jobs)
+    yoe_jobs = with_yoe.dropna(subset=["yoe"])
+    summary = summarize_yoe_by_department(yoe_jobs, min_count=2)
+
+    assert list(with_yoe["yoe"])[:4] == [3, 5, 7, 2]
+    assert pd.isna(with_yoe.loc[4, "yoe"])
+    assert list(summary.index) == ["Engineering"]
+    assert summary.loc["Engineering", "median"] == 5
+    assert summary.loc["Engineering", "mean"] == 5
+    assert summary.loc["Engineering", "count"] == 3
+
+
+def test_build_education_requirement_summary_counts_overall_and_by_department():
+    jobs = pd.DataFrame(
+        [
+            {"description_md": "Bachelor's degree in computer science", "department": "Engineering"},
+            {"description_md": "Master's degree preferred", "department": "Engineering"},
+            {"description_md": "No degree required", "department": "Product"},
+            {"description_md": "PhD required", "department": "Other"},
+        ]
+    )
+
+    edu_series, edu_dept = build_education_requirement_summary(
+        jobs,
+        education_patterns={
+            "PhD": r"\bPhD\b",
+            "Master": r"\bMaster'?s?\b",
+            "Bachelor": r"\bBachelor'?s?\b",
+        },
+    )
+
+    assert edu_series.to_dict() == {"Bachelor": 1, "Master": 1, "PhD": 1}
+    assert list(edu_dept.index) == ["Engineering", "Product"]
+    assert list(edu_dept.columns) == ["Bachelor", "Master", "PhD"]
+    assert edu_dept.loc["Engineering", "Bachelor"] == 50
+    assert edu_dept.loc["Engineering", "Master"] == 50
+    assert edu_dept.loc["Product", "Bachelor"] == 0
 
 
 def test_score_scope_rewards_builder_and_owner_language():
