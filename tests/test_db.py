@@ -43,6 +43,13 @@ def test_db_does_not_own_board_derivation():
     assert not hasattr(db, "derive_adhoc")
 
 
+def test_db_does_not_own_classification():
+    assert not hasattr(db, "normalize_department")
+    assert not hasattr(db, "classify_work_mode")
+    assert not hasattr(db, "extract_yoe")
+    assert not hasattr(db, "add_usd_salary")
+
+
 def test_open_silver_creates_schema(tmp_path):
     conn = db.open_silver(base_dir=str(tmp_path))
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
