@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import re
 from typing import Any, Final
 
+import numpy as np
 import pandas as pd
 from classify import add_usd_salary
 from sklearn.cluster import KMeans
@@ -123,6 +124,17 @@ class TfidfClusterResult:
     skipped_reason: str | None = None
     initial_error: str | None = None
     retry_error: str | None = None
+
+
+@dataclass
+class DescriptionLengthAnalysis:
+    """Container for description length metrics and salary relationships."""
+
+    df: pd.DataFrame
+    df_len_sal: pd.DataFrame
+    department_median_words: pd.Series
+    correlations: pd.DataFrame | None = None
+    word_salary_trend: tuple[float, float] | None = None
 
 
 def split_locations(location: object) -> list[str]:
@@ -371,6 +383,60 @@ def build_cluster_profiles(
             }
         )
     return pd.DataFrame(rows, columns=columns)
+
+
+def build_description_length_analysis(
+    df: pd.DataFrame,
+    *,
+    text_col: str = "description_md",
+    department_col: str = "department",
+    salary_col: str = "mid_usd",
+    top_departments: int = 10,
+    min_salary_rows: int = 3,
+) -> DescriptionLengthAnalysis:
+    """Derive description length metrics and salary relationship summaries."""
+    desc_df = df.copy()
+    descriptions = (
+        desc_df[text_col]
+        if text_col in desc_df.columns
+        else pd.Series(index=desc_df.index, dtype=object)
+    )
+    desc_df["desc_len"] = descriptions.str.len()
+    desc_df["desc_words"] = descriptions.str.split().str.len()
+    desc_df["n_bullets"] = descriptions.str.count(r"^\s*[\*\-]\s", flags=re.MULTILINE)
+
+    subset_cols = [salary_col, "desc_words"]
+    df_len_sal = (
+        desc_df.dropna(subset=subset_cols).copy()
+        if all(column in desc_df.columns for column in subset_cols)
+        else desc_df.iloc[0:0].copy()
+    )
+
+    if department_col in desc_df.columns:
+        department_median_words = (
+            desc_df.groupby(department_col)["desc_words"].median().sort_values(ascending=True)
+        )
+        top_department_index = desc_df[department_col].value_counts().head(top_departments).index
+        department_median_words = department_median_words[
+            department_median_words.index.isin(top_department_index)
+        ]
+    else:
+        department_median_words = pd.Series(dtype=float)
+
+    correlations = None
+    trend = None
+    if len(df_len_sal) >= min_salary_rows:
+        correlations = df_len_sal[["desc_words", "n_bullets", salary_col]].corr()
+        slope, intercept = np.polyfit(df_len_sal["desc_words"], df_len_sal[salary_col], 1)
+        trend = (float(slope), float(intercept))
+
+    return DescriptionLengthAnalysis(
+        df=desc_df,
+        df_len_sal=df_len_sal,
+        department_median_words=department_median_words,
+        correlations=correlations,
+        word_salary_trend=trend,
+    )
 
 
 def score_scope(description: object) -> int:

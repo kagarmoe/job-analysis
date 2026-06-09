@@ -41,7 +41,7 @@ def test_salary_notebook_uses_shared_location_helper_and_generic_labels():
 def test_nlp_notebook_uses_shared_gold_helpers():
     source = _notebook_source("analyze_nlp.ipynb")
     assert (
-        "from gold_analysis import build_cluster_profiles, build_department_skill_matrix, build_education_requirement_summary, build_skill_mention_counts, build_tfidf_cluster_projection, build_yoe_dataset, summarize_yoe_by_department"
+        "from gold_analysis import build_cluster_profiles, build_department_skill_matrix, build_description_length_analysis, build_education_requirement_summary, build_skill_mention_counts, build_tfidf_cluster_projection, build_yoe_dataset, summarize_yoe_by_department"
         in source
     )
     assert "def extract_yoe" not in source
@@ -68,6 +68,13 @@ def test_nlp_notebook_uses_shared_gold_helpers():
     assert "TF-IDF unavailable after retry" in source
     assert "cluster_result = build_tfidf_cluster_projection(df_nlp)" in source
     assert "cluster_profiles = build_cluster_profiles(cluster_result)" in source
+    assert "df_nlp[\"desc_len\"] = df_nlp[\"description_md\"].str.len()" not in source
+    assert "df_nlp[\"desc_words\"] = df_nlp[\"description_md\"].str.split().str.len()" not in source
+    assert "df_nlp[\"n_bullets\"] = df_nlp[\"description_md\"].str.count" not in source
+    assert "df_len_sal = df_nlp.dropna(subset=[\"mid_usd\", \"desc_words\"])" not in source
+    assert "dept_len = df_nlp.groupby(\"department\")[\"desc_words\"].median()" not in source
+    assert "np.polyfit(df_len_sal[\"desc_words\"], df_len_sal[\"mid_usd\"], 1)" not in source
+    assert "description_length = build_description_length_analysis(df_nlp)" in source
 
 
 def test_role_gap_notebook_uses_shared_scope_and_yoe_helpers():

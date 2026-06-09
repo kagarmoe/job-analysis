@@ -10,6 +10,7 @@ from gold_analysis import (
     build_monthly_hiring_activity,
     build_quarterly_salary_stats,
     build_cluster_profiles,
+    build_description_length_analysis,
     build_skill_overlap_matrix,
     build_skill_mention_counts,
     build_tfidf_cluster_projection,
@@ -224,6 +225,64 @@ def test_build_cluster_profiles_summarizes_terms_departments_and_salary():
     assert profiles["role_count"].sum() == len(result.df_cluster)
     assert all(isinstance(terms, list) for terms in profiles["top_terms"])
     assert all(isinstance(departments, str) for departments in profiles["top_departments"])
+
+
+def test_build_description_length_analysis_derives_metrics_and_salary_relationships():
+    jobs = pd.DataFrame(
+        [
+            {
+                "description_md": "alpha\n- build",
+                "department": "Engineering",
+                "mid_usd": 100000,
+            },
+            {
+                "description_md": "alpha beta gamma delta",
+                "department": "Engineering",
+                "mid_usd": 150000,
+            },
+            {
+                "description_md": "alpha beta gamma delta epsilon zeta",
+                "department": "Product",
+                "mid_usd": 200000,
+            },
+            {
+                "description_md": "alpha beta",
+                "department": "Product",
+                "mid_usd": None,
+            },
+        ]
+    )
+
+    analysis = build_description_length_analysis(jobs)
+
+    assert {"desc_len", "desc_words", "n_bullets"}.issubset(analysis.df.columns)
+    assert analysis.df.loc[0, "desc_words"] == 3
+    assert analysis.df.loc[0, "n_bullets"] == 1
+    assert list(analysis.df_len_sal.index) == [0, 1, 2]
+    assert list(analysis.department_median_words.index) == ["Engineering", "Product"]
+    assert analysis.department_median_words.loc["Engineering"] == 3.5
+    assert analysis.correlations is not None
+    assert set(analysis.correlations.columns) == {"desc_words", "n_bullets", "mid_usd"}
+    assert analysis.word_salary_trend is not None
+    slope, intercept = analysis.word_salary_trend
+    assert slope > 0
+    assert intercept < 100000
+
+
+def test_build_description_length_analysis_handles_insufficient_salary_data():
+    jobs = pd.DataFrame(
+        [
+            {"description_md": "alpha beta", "department": "Engineering", "mid_usd": 100000},
+            {"description_md": "alpha beta gamma", "department": "Product", "mid_usd": None},
+        ]
+    )
+
+    analysis = build_description_length_analysis(jobs, min_salary_rows=3)
+
+    assert len(analysis.df_len_sal) == 1
+    assert analysis.correlations is None
+    assert analysis.word_salary_trend is None
+    assert not analysis.department_median_words.empty
 
 
 def test_score_scope_rewards_builder_and_owner_language():
