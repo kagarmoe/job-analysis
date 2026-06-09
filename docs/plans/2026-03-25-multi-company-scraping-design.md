@@ -1,7 +1,12 @@
 # Multi-Company Job Scraping
 
 **Date:** 2026-03-25
-**Status:** Approved
+**Status:** Deprecated
+
+> Deprecated 2026-06-09. This CSV-first design is retained for historical
+> context. Shared classification, board-specific scrapers, and normalized
+> departments are carried forward in
+> `docs/plans/2026-06-09-medallion-python-first-recovery-plan.md`.
 
 ## Goal
 

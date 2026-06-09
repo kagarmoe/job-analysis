@@ -1,5 +1,5 @@
-"""Tests for department normalization and YOE extraction (now in db.py)."""
-from db import normalize_department
+"""Tests for department normalization and YOE extraction."""
+from classify import normalize_department
 
 
 def test_anthropic_engineering():
@@ -92,7 +92,7 @@ def test_other_passthrough():
     assert normalize_department("Other") == "Other"
 
 
-from db import extract_yoe
+from classify import extract_yoe
 
 
 def test_extract_yoe_plus_pattern():

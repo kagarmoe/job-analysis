@@ -14,13 +14,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger(__name__)
 
 
-def scrape_all_jobs(company: str) -> tuple[list[dict], str]:
+def scrape_all_jobs(company: str, *, copper_base_dir: str = "copper") -> tuple[list[dict], str]:
     url = f"https://api.ashbyhq.com/posting-api/job-board/{company}"
     log.info("Fetching all jobs from Ashby API for %s ...", company)
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
     source_date = date.today().strftime("%Y%m%d")
-    copper_db = db.open_copper("ashby")
+    copper_db = db.open_copper("ashby", base_dir=copper_base_dir)
     db.store_copper(copper_db, url=url, http_status=resp.status_code,
                     content=resp.text, source_date=source_date)
     jobs = resp.json().get("jobs", [])

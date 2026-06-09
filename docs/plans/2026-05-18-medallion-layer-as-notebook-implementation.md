@@ -1,6 +1,11 @@
 # Medallion Layer-as-Notebook Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Deprecated 2026-06-09. The repo is moving away from notebooks as required
+> ETL execution layers. Use
+> `docs/plans/2026-06-09-medallion-python-first-recovery-plan.md` instead.
+
+> Historical note: this was originally written as an executable implementation
+> plan for an older assistant workflow.
 
 **Goal:** Replace `copper.py`, `bronze.py`, `silver.py`, `classify.py` with `db.py` (importable DB utilities + salary parsing) and `classify.ipynb` (classification functions), with `copper.ipynb` and `bronze.ipynb` as executable layer notebooks.
 

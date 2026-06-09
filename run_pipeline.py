@@ -62,11 +62,17 @@ log = logging.getLogger(__name__)
 KERNEL_NAME = "job-analysis"
 
 
-def scrape_adhoc(url: str, company: str, job_id: str) -> None:
+def scrape_adhoc(
+    url: str,
+    company: str,
+    job_id: str,
+    *,
+    copper_base_dir: str = "copper",
+) -> None:
     """Fetch a single job page from an unknown board and store to copper/adhoc."""
     import db as _db, requests
     from datetime import date
-    copper_db = _db.open_copper("adhoc")
+    copper_db = _db.open_copper("adhoc", base_dir=copper_base_dir)
     source_date = date.today().strftime("%Y%m%d")
     log.info("Fetching adhoc job: %s", url)
     resp = requests.get(url, timeout=30, headers={"User-Agent": "JobBoardResearch/1.0"})
@@ -77,22 +83,36 @@ def scrape_adhoc(url: str, company: str, job_id: str) -> None:
 
 
 
-def run_scraper(board: str, company: str) -> None:
+def run_scraper(
+    board: str,
+    company: str,
+    *,
+    copper_base_dir: str = "copper",
+) -> None:
     """Run the appropriate scraper for the given board."""
     if board == "ashby":
-        cmd = [sys.executable, "scrape_ashby.py", "--company", company]
+        import scrape_ashby
+
+        scrape_ashby.scrape_all_jobs(company, copper_base_dir=copper_base_dir)
     elif board == "greenhouse":
-        cmd = [sys.executable, "scrape_greenhouse.py", "--company", company]
+        import scrape_greenhouse
+
+        scrape_greenhouse.scrape_all_jobs(company, copper_base_dir=copper_base_dir)
     else:
         log.warning("run_scraper called for unsupported board %r — skipping", board)
         return
 
-    log.info("Scraping current jobs: %s", " ".join(cmd))
-    subprocess.run(cmd, check=True)
 
-
-def run_wayback(board: str, company: str) -> None:
+def run_wayback(
+    board: str,
+    company: str,
+    *,
+    copper_base_dir: str = "copper",
+) -> None:
     """Run wayback scraper to populate copper/bronze with historical snapshots."""
+    if copper_base_dir != "copper":
+        log.info("Skipping wayback for non-default copper base dir: %s", copper_base_dir)
+        return
     log.info("Running wayback scraper for %s/%s...", board, company)
     cmd = [sys.executable, "scrape_wayback.py", "--board", board, "--company", company]
     try:
@@ -154,11 +174,17 @@ def run_notebook(notebook_path: str, output_label: str) -> bool:
         return False
 
 
-def print_summary(company: str, board: str, job_id: str) -> None:
-    import sqlite3 as _sqlite3
+def get_summary(
+    company: str,
+    board: str,
+    job_id: str,
+    *,
+    silver_base_dir: str = "silver",
+) -> dict | None:
+    import db as _db
+
     try:
-        conn = _sqlite3.connect("silver/jobs.db")
-        conn.row_factory = _sqlite3.Row
+        conn = _db.open_silver(base_dir=silver_base_dir)
         target = conn.execute(
             "SELECT * FROM jobs WHERE company=? AND board=? AND job_id=?"
             " ORDER BY source_date DESC LIMIT 1",
@@ -167,75 +193,66 @@ def print_summary(company: str, board: str, job_id: str) -> None:
         conn.close()
     except Exception as e:
         log.warning("Could not query silver for summary: %s", e)
-        return
+        return None
     if not target:
         log.warning("Job %s not found in silver for summary", job_id)
+        return None
+
+    return {
+        "title": target["title"],
+        "company": company,
+        "department": target["department"],
+        "salary_min": target["salary_min"],
+        "salary_max": target["salary_max"],
+        "location": target["location"],
+    }
+
+
+def print_summary(summary: dict | None) -> None:
+    if not summary:
         return
     print("\n" + "=" * 60)
     print("PIPELINE SUMMARY")
     print("=" * 60)
-    print(f"  Target:     {target['title']}")
-    print(f"  Company:    {company}")
-    print(f"  Department: {target['department'] or 'N/A'}")
-    sal_min, sal_max = target["salary_min"], target["salary_max"]
+    print(f"  Target:     {summary['title']}")
+    print(f"  Company:    {summary['company']}")
+    print(f"  Department: {summary['department'] or 'N/A'}")
+    sal_min, sal_max = summary["salary_min"], summary["salary_max"]
     salary_str = f"${float(sal_min):,.0f} – ${float(sal_max):,.0f}" if sal_min and sal_max else "N/A"
     print(f"  Salary:     {salary_str}")
-    print(f"  Location:   {target['location'] or 'N/A'}")
+    print(f"  Location:   {summary['location'] or 'N/A'}")
     print("=" * 60)
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Run the full job analysis pipeline")
-    ap.add_argument("url", help="Job posting URL (Ashby or Greenhouse)")
-    args = ap.parse_args()
-
-    info = parse_job_url(args.url)
-    board, company, job_id = info["board"], info["company"], info["job_id"]
-    log.info("Parsed: board=%s company=%s job_id=%s", board, company, job_id)
-
-    # Step 1: Scrape → copper
-    if board == "adhoc":
-        scrape_adhoc(args.url, company, job_id)
-    else:
-        run_scraper(board, company)
-        run_wayback(board, company)
-
-    # Step 2: Bronze derivation via notebook
+def run_gold_notebooks(
+    company: str,
+    board: str,
+    job_id: str,
+    *,
+    silver_base_dir: str = "silver",
+    bronze_base_dir: str = "bronze",
+) -> list[tuple[str, bool]]:
     nb_config = {"COMPANY": company, "BOARD": board}
-    bronze_config = {**nb_config, "JOB_ID": job_id if board == "adhoc" else ""}
-    tmp_bronze = inject_notebook_config("bronze.ipynb", bronze_config)
-    bronze_ok = run_notebook(tmp_bronze, "Bronze ETL")
-    if not bronze_ok:
-        log.error("Bronze ETL failed — aborting pipeline")
-        sys.exit(1)
+    results: list[tuple[str, bool]] = []
 
-    # Step 3: Silver ETL
-    tmp = inject_notebook_config("silver.ipynb", nb_config)
-    results = [("Silver ETL", run_notebook(tmp, "Silver ETL"))]
-
-    # Step 4: Gold notebooks
-
-    # Salary analysis — skip if no salary data in silver
     import db as _db
-    _silver_db = _db.open_silver()
-    _has_salary = bool(_silver_db.execute(
+
+    silver_db = _db.open_silver(base_dir=silver_base_dir)
+    has_salary = bool(silver_db.execute(
         "SELECT 1 FROM jobs WHERE company=? AND board=? AND has_salary=1 LIMIT 1",
         (company, board)
     ).fetchone())
-    if _has_salary:
+    if has_salary:
         tmp = inject_notebook_config("analyze_salaries.ipynb", nb_config)
         results.append(("Salary Analysis", run_notebook(tmp, "Salary Analysis")))
     else:
         log.info("Skipping salary analysis (no salary data found)")
 
-    # NLP analysis
     tmp = inject_notebook_config("analyze_nlp.ipynb", nb_config)
     results.append(("NLP Analysis", run_notebook(tmp, "NLP Analysis")))
 
-    # Historical analysis: check bronze instead of CSV file
-    import db as _db
-    _bronze_db = _db.open_bronze(board)
-    has_historical = bool(_bronze_db.execute(
+    bronze_db = _db.open_bronze(board, base_dir=bronze_base_dir)
+    has_historical = bool(bronze_db.execute(
         "SELECT 1 FROM snapshots WHERE company=? LIMIT 1", (company,)
     ).fetchone())
     if has_historical:
@@ -244,27 +261,92 @@ def main():
     else:
         log.info("Skipping historical analysis (no data)")
 
-    # Role gap analysis
     tmp = inject_notebook_config("analyze_role_gap.ipynb", {**nb_config, "JOB_ID": job_id})
     results.append(("Role Gap Analysis", run_notebook(tmp, "Role Gap Analysis")))
+    return results
 
-    # Step 5: Summary
-    print_summary(company, board, job_id)
 
-    print("\nNotebook Results:")
-    for name, ok in results:
-        status = "✓" if ok else "✗"
-        print(f"  {status} {name}")
+def run_pipeline(
+    url: str,
+    *,
+    run_notebooks: bool = False,
+    copper_base_dir: str = "copper",
+    bronze_base_dir: str = "bronze",
+    silver_base_dir: str = "silver",
+) -> dict | None:
+    import bronze
+    import silver
 
-    # Clean up temp notebooks
-    for p in Path(".").glob(".pipeline_*.ipynb"):
-        p.unlink()
+    info = parse_job_url(url)
+    board, company, job_id = info["board"], info["company"], info["job_id"]
+    log.info("Parsed: board=%s company=%s job_id=%s", board, company, job_id)
 
-    if all(ok for _, ok in results):
-        print("\nAll notebooks complete. Open them in Jupyter to view charts.")
+    if board == "adhoc":
+        scrape_adhoc(url, company, job_id, copper_base_dir=copper_base_dir)
     else:
-        print("\nSome notebooks failed. Check logs above.")
+        run_scraper(board, company, copper_base_dir=copper_base_dir)
+        run_wayback(board, company, copper_base_dir=copper_base_dir)
+
+    bronze_count = bronze.derive(
+        board,
+        company,
+        job_id if board == "adhoc" else None,
+        copper_base_dir=copper_base_dir,
+        bronze_base_dir=bronze_base_dir,
+    )
+    log.info("Bronze derivation complete: %d records for %s/%s", bronze_count, company, board)
+
+    silver_result = silver.process(
+        board,
+        company,
+        bronze_base_dir=bronze_base_dir,
+        silver_base_dir=silver_base_dir,
+    )
+    log.info(
+        "Silver ETL complete: processed=%d upserted=%d rejected=%d",
+        silver_result["processed"],
+        silver_result["upserted"],
+        silver_result["rejected"],
+    )
+
+    summary = get_summary(company, board, job_id, silver_base_dir=silver_base_dir)
+
+    if run_notebooks:
+        results = run_gold_notebooks(
+            company,
+            board,
+            job_id,
+            silver_base_dir=silver_base_dir,
+            bronze_base_dir=bronze_base_dir,
+        )
+        print("\nNotebook Results:")
+        for name, ok in results:
+            status = "✓" if ok else "✗"
+            print(f"  {status} {name}")
+        for path in Path(".").glob(".pipeline_*.ipynb"):
+            path.unlink()
+        if not all(ok for _, ok in results):
+            raise RuntimeError("Some notebooks failed")
+
+    return summary
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Run the full job analysis pipeline")
+    ap.add_argument("url", help="Job posting URL (Ashby or Greenhouse)")
+    ap.add_argument(
+        "--run-notebooks",
+        action="store_true",
+        help="Execute optional gold analysis notebooks after ETL",
+    )
+    args = ap.parse_args()
+
+    try:
+        summary = run_pipeline(args.url, run_notebooks=args.run_notebooks)
+    except Exception as exc:
+        log.error("Pipeline failed: %s", exc)
         sys.exit(1)
+    print_summary(summary)
 
 
 if __name__ == "__main__":
