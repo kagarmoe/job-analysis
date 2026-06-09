@@ -63,7 +63,7 @@ def test_role_gap_notebook_uses_shared_scope_and_yoe_helpers():
 def test_historical_notebook_uses_shared_temporal_helpers():
     source = _notebook_source("analyze_historical.ipynb")
     assert (
-        "from gold_analysis import build_active_role_timeseries, build_active_closed_comparison, build_historical_dataset, build_monthly_hiring_activity, build_time_to_fill_dataset, summarize_recurring_roles"
+        "from gold_analysis import build_active_role_timeseries, build_active_closed_comparison, build_department_quarterly_salary_trends, build_historical_dataset, build_monthly_hiring_activity, build_quarterly_salary_stats, build_time_to_fill_dataset, summarize_recurring_roles"
         in source
     )
     assert "temporal = df.groupby(\"job_id\")" not in source
@@ -74,6 +74,8 @@ def test_historical_notebook_uses_shared_temporal_helpers():
     assert "sen_status = hist.groupby([\"seniority\", \"is_active\"])" not in source
     assert "hist_salary[\"status\"] = hist_salary[\"is_active\"].map" not in source
     assert "title_counts = hist_salary.groupby(\"title_norm\")" not in source
+    assert "hist_salary.groupby(\"quarter\")[\"mid_usd\"].agg" not in source
+    assert "dept_qtr_counts = hist_salary.groupby([\"quarter\", \"department\"])" not in source
     assert "No salary data available - skipping quarterly salary trend charts." in source
     assert "if qtr_stats.empty:" in source
 

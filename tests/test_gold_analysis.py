@@ -3,8 +3,10 @@ import pandas as pd
 from gold_analysis import (
     build_active_role_timeseries,
     build_active_closed_comparison,
+    build_department_quarterly_salary_trends,
     build_historical_dataset,
     build_monthly_hiring_activity,
+    build_quarterly_salary_stats,
     build_skill_overlap_matrix,
     build_time_to_fill_dataset,
     extract_required_yoe,
@@ -102,6 +104,80 @@ def test_build_historical_dataset_derives_first_last_and_active_flags():
     assert bool(row1["is_active"]) is True
     assert bool(row2["is_active"]) is False
     assert set(hist_salary["job_id"]) == {"1"}
+
+
+def test_build_quarterly_salary_stats_returns_empty_contract_without_salary_data():
+    hist_salary = pd.DataFrame(columns=["first_seen", "mid_usd"])
+
+    salary_with_quarter, qtr_stats = build_quarterly_salary_stats(hist_salary)
+
+    assert salary_with_quarter.empty
+    assert list(qtr_stats.columns) == ["median", "mean", "count", "std"]
+    assert qtr_stats.empty
+
+
+def test_build_quarterly_salary_stats_derives_timestamp_index_and_numeric_stats():
+    hist_salary = pd.DataFrame(
+        [
+            {"job_id": "1", "first_seen": pd.Timestamp("2026-01-05"), "mid_usd": 100000},
+            {"job_id": "2", "first_seen": pd.Timestamp("2026-02-10"), "mid_usd": 140000},
+            {"job_id": "3", "first_seen": pd.Timestamp("2026-04-01"), "mid_usd": 180000},
+        ]
+    )
+
+    salary_with_quarter, qtr_stats = build_quarterly_salary_stats(hist_salary)
+
+    assert "quarter" in salary_with_quarter.columns
+    assert "quarter" not in hist_salary.columns
+    assert list(salary_with_quarter["quarter"]) == [
+        pd.Period("2026Q1", freq="Q-DEC"),
+        pd.Period("2026Q1", freq="Q-DEC"),
+        pd.Period("2026Q2", freq="Q-DEC"),
+    ]
+    assert list(qtr_stats.index) == [
+        pd.Timestamp("2026-01-01"),
+        pd.Timestamp("2026-04-01"),
+    ]
+    assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "median"] == 120000
+    assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "mean"] == 120000
+    assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "count"] == 2
+    assert qtr_stats["median"].dtype.kind in {"f", "i"}
+
+
+def test_build_department_quarterly_salary_trends_filters_for_meaningful_data():
+    hist_salary = pd.DataFrame(
+        [
+            {"job_id": "eng-q1-1", "first_seen": pd.Timestamp("2026-01-05"), "department": "Engineering", "mid_usd": 100000},
+            {"job_id": "eng-q1-2", "first_seen": pd.Timestamp("2026-01-10"), "department": "Engineering", "mid_usd": 120000},
+            {"job_id": "eng-q1-3", "first_seen": pd.Timestamp("2026-02-01"), "department": "Engineering", "mid_usd": 140000},
+            {"job_id": "eng-q2-1", "first_seen": pd.Timestamp("2026-04-01"), "department": "Engineering", "mid_usd": 160000},
+            {"job_id": "eng-q2-2", "first_seen": pd.Timestamp("2026-04-10"), "department": "Engineering", "mid_usd": 180000},
+            {"job_id": "eng-q2-3", "first_seen": pd.Timestamp("2026-05-01"), "department": "Engineering", "mid_usd": 200000},
+            {"job_id": "prod-q1-1", "first_seen": pd.Timestamp("2026-01-05"), "department": "Product", "mid_usd": 150000},
+            {"job_id": "prod-q1-2", "first_seen": pd.Timestamp("2026-01-10"), "department": "Product", "mid_usd": 160000},
+            {"job_id": "prod-q1-3", "first_seen": pd.Timestamp("2026-02-01"), "department": "Product", "mid_usd": 170000},
+            {"job_id": "other-q1-1", "first_seen": pd.Timestamp("2026-01-05"), "department": "Other", "mid_usd": 110000},
+            {"job_id": "other-q1-2", "first_seen": pd.Timestamp("2026-01-10"), "department": "Other", "mid_usd": 120000},
+            {"job_id": "other-q1-3", "first_seen": pd.Timestamp("2026-02-01"), "department": "Other", "mid_usd": 130000},
+            {"job_id": "other-q2-1", "first_seen": pd.Timestamp("2026-04-01"), "department": "Other", "mid_usd": 140000},
+            {"job_id": "other-q2-2", "first_seen": pd.Timestamp("2026-04-10"), "department": "Other", "mid_usd": 150000},
+            {"job_id": "other-q2-3", "first_seen": pd.Timestamp("2026-05-01"), "department": "Other", "mid_usd": 160000},
+        ]
+    )
+
+    dept_qtr = build_department_quarterly_salary_trends(hist_salary)
+
+    assert list(dept_qtr.columns) == ["Engineering"]
+    assert list(dept_qtr.index) == [
+        pd.Timestamp("2026-01-01"),
+        pd.Timestamp("2026-04-01"),
+    ]
+    assert dept_qtr.loc[pd.Timestamp("2026-01-01"), "Engineering"] == 120000
+    assert dept_qtr.loc[pd.Timestamp("2026-04-01"), "Engineering"] == 180000
+
+
+def test_build_department_quarterly_salary_trends_handles_no_salary_data():
+    assert build_department_quarterly_salary_trends(pd.DataFrame()).empty
 
 
 def test_build_active_role_timeseries_counts_open_roles_over_time():

@@ -201,6 +201,54 @@ def build_historical_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     return hist, hist_salary
 
 
+def build_quarterly_salary_stats(hist_salary: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Add salary quarters and summarize salary midpoint stats by quarter."""
+    salary = hist_salary.copy()
+    qtr_stats_columns = ["median", "mean", "count", "std"]
+    if salary.empty:
+        return salary, pd.DataFrame(columns=qtr_stats_columns)
+
+    salary["quarter"] = pd.to_datetime(salary["first_seen"]).dt.to_period("Q")
+    qtr_stats = salary.groupby("quarter")["mid_usd"].agg(qtr_stats_columns)
+    qtr_stats.index = qtr_stats.index.to_timestamp()
+    qtr_stats = qtr_stats.apply(pd.to_numeric, errors="coerce")
+    return salary, qtr_stats
+
+
+def build_department_quarterly_salary_trends(
+    hist_salary: pd.DataFrame,
+    *,
+    min_roles_per_quarter: int = 3,
+    min_quarters: int = 2,
+) -> pd.DataFrame:
+    """Return quarterly median salaries for departments with enough observations."""
+    if hist_salary.empty:
+        return pd.DataFrame()
+
+    salary = hist_salary.copy()
+    if "quarter" not in salary.columns:
+        salary["quarter"] = pd.to_datetime(salary["first_seen"]).dt.to_period("Q")
+
+    dept_qtr_counts = salary.groupby(["quarter", "department"]).size().unstack(fill_value=0)
+    departments = [
+        department
+        for department in dept_qtr_counts.columns
+        if department != "Other"
+        and (dept_qtr_counts[department] >= min_roles_per_quarter).sum() >= min_quarters
+    ]
+    if not departments:
+        return pd.DataFrame()
+
+    dept_qtr = (
+        salary[salary["department"].isin(departments)]
+        .groupby(["quarter", "department"])["mid_usd"]
+        .median()
+        .unstack()
+    )
+    dept_qtr.index = dept_qtr.index.to_timestamp()
+    return dept_qtr
+
+
 def build_active_role_timeseries(hist: pd.DataFrame, freq: str = "W") -> pd.DataFrame:
     """Count how many roles were active at each point in a date range."""
     if hist.empty:
