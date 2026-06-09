@@ -1,13 +1,10 @@
 """
-db.py — Consolidated DB utilities and salary parsing for the job analysis pipeline.
-
-Replaces copper.py, bronze.py, silver.py as a single importable module.
-Includes salary parsing moved from classify.py (needed by derive_ashby).
+db.py — Storage utilities and salary parsing for the job analysis pipeline.
 
 Sections:
   1. Salary parsing (SalaryParseResult, parse_salary_text, etc.)
   2. Copper layer  (open_copper, get_copper, store_copper)
-  3. Bronze layer  (open_bronze, store_bronze, derive_ashby, derive_greenhouse, derive_adhoc)
+  3. Bronze storage (open_bronze, store_bronze)
   4. Silver layer  (open_silver, upsert_job, log_run)
 """
 
@@ -362,140 +359,6 @@ def store_bronze(conn: sqlite3.Connection, *, company: str, board: str, job_id: 
          original_url, http_status, content, copper_id),
     )
     conn.commit()
-
-
-_ASHBY_JOB_URL_RE = re.compile(
-    r"jobs\.ashbyhq\.com/([^/]+)"
-    r"/([0-9a-zA-Z][0-9a-zA-Z\-]+)"
-    r"(/application)?$",
-)
-_ASHBY_API_BOARD_RE = re.compile(
-    r"api\.ashbyhq\.com/posting-api/job-board/([^/]+)$"
-)
-_ASHBY_INDIVIDUAL_JOB_RE = re.compile(
-    r"api\.ashbyhq\.com/posting-api/job-board/[^/]+/job/"
-    r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
-)
-
-
-def derive_ashby(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connection,
-                 company: str) -> int:
-    """Derive per-job bronze records from copper for an Ashby company."""
-    rows = copper_conn.execute(
-        "SELECT id, url, content, source_date FROM snapshots "
-        "WHERE url LIKE ? OR url LIKE ? OR url LIKE ?",
-        (f"%jobs.ashbyhq.com/{company}/%",
-         f"%api.ashbyhq.com/posting-api/job-board/{company}%",
-         f"%api.ashbyhq.com/posting-api/job-board/{company}/job/%"),
-    ).fetchall()
-
-    count = 0
-    for row in rows:
-        url = row["url"]
-        content = row["content"] or ""
-
-        # Board-level API response: split into per-job api_board records
-        if _ASHBY_API_BOARD_RE.search(url):
-            try:
-                jobs = _json.loads(content).get("jobs", [])
-            except Exception:
-                continue
-            for job in jobs:
-                jid = str(job.get("id", ""))
-                if not jid:
-                    continue
-                store_bronze(bronze_conn, company=company, board="ashby", job_id=jid,
-                             page_type="api_board", source_date=row["source_date"],
-                             original_url=url, http_status=200,
-                             content=_json.dumps(job), copper_id=row["id"])
-                count += 1
-            continue
-
-        # Individual job API response (wayback fallback path)
-        m_ind = _ASHBY_INDIVIDUAL_JOB_RE.search(url)
-        if m_ind:
-            job_id = m_ind.group(1)
-            store_bronze(bronze_conn, company=company, board="ashby", job_id=job_id,
-                         page_type="api_board", source_date=row["source_date"],
-                         original_url=url, http_status=200, content=content,
-                         copper_id=row["id"])
-            count += 1
-            continue
-
-        # Individual job page or /application page
-        m = _ASHBY_JOB_URL_RE.search(url)
-        if not m:
-            continue
-        job_id = m.group(2)
-        is_application = bool(m.group(3))
-        page_type = "application" if is_application else "job_page"
-
-        if is_application and content:
-            jld = parse_json_ld_job_posting(content)
-            content = _json.dumps(jld) if jld else content
-
-        store_bronze(bronze_conn, company=company, board="ashby", job_id=job_id,
-                     page_type=page_type, source_date=row["source_date"],
-                     original_url=url, http_status=200, content=content,
-                     copper_id=row["id"])
-        count += 1
-    return count
-
-
-_GH_API_RE = re.compile(r"boards-api\.greenhouse\.io/v1/boards/([^/]+)/jobs")
-
-
-def derive_greenhouse(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connection,
-                      company: str) -> int:
-    """Derive per-job bronze records from copper for a Greenhouse company."""
-    rows = copper_conn.execute(
-        "SELECT id, url, content, source_date FROM snapshots WHERE url LIKE ?",
-        (f"%greenhouse.io%boards/{company}%",),
-    ).fetchall()
-
-    count = 0
-    for row in rows:
-        if not _GH_API_RE.search(row["url"]):
-            continue
-        try:
-            jobs = _json.loads(row["content"] or "{}").get("jobs", [])
-        except Exception:
-            continue
-        for job in jobs:
-            jid = str(job.get("id", ""))
-            if not jid:
-                continue
-            store_bronze(bronze_conn, company=company, board="greenhouse", job_id=jid,
-                         page_type="api_board", source_date=row["source_date"],
-                         original_url=row["url"], http_status=200,
-                         content=_json.dumps(job), copper_id=row["id"])
-            count += 1
-    return count
-
-
-def derive_adhoc(copper_conn: sqlite3.Connection, bronze_conn: sqlite3.Connection,
-                 company: str, job_id: str, url: str = "") -> int:
-    """Derive bronze records for an adhoc job. If url is provided, matches exactly; otherwise falls back to job_id substring match."""
-    if url:
-        rows = copper_conn.execute(
-            "SELECT id, url, content, source_date FROM snapshots "
-            "WHERE url=? ORDER BY source_date",
-            (url,),
-        ).fetchall()
-    else:
-        rows = copper_conn.execute(
-            "SELECT id, url, content, source_date FROM snapshots "
-            "WHERE url LIKE ? ORDER BY source_date",
-            (f"%{job_id}%",),
-        ).fetchall()
-    count = 0
-    for row in rows:
-        store_bronze(bronze_conn, company=company, board="adhoc", job_id=job_id,
-                     page_type="job_page", source_date=row["source_date"],
-                     original_url=row["url"], http_status=200,
-                     content=row["content"] or "", copper_id=row["id"])
-        count += 1
-    return count
 
 
 # ===========================================================================

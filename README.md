@@ -72,28 +72,23 @@ python scrape_wayback.py --board greenhouse --company anthropic
 
 ### ETL Layers
 
-Run a layer notebook directly (useful when re-processing after a schema or classifier change):
+Run a layer directly (useful when re-processing after a schema or classifier change):
 
 ```bash
 # Bronze: parse copper → structured per-job records
-# Requires COMPANY and BOARD set in the config cell, or inject them:
-jupyter nbconvert --to notebook --execute bronze.ipynb \
-  --ExecutePreprocessor.kernel_name=job-analysis \
-  --output /tmp/bronze_out.ipynb
+python bronze.py --board ashby --company pinecone
+python bronze.py --board greenhouse --company anthropic
 
 # Silver: classify bronze records → silver/jobs.db
-jupyter nbconvert --to notebook --execute silver.ipynb \
-  --ExecutePreprocessor.kernel_name=job-analysis \
-  --output /tmp/silver_out.ipynb
+python silver.py --board ashby --company pinecone
+python silver.py --board greenhouse --company anthropic
 ```
 
 To re-derive bronze from existing copper without re-scraping:
 
 ```python
-import db
-copper_db = db.open_copper("ashby")
-bronze_db = db.open_bronze("ashby")
-count = db.derive_ashby(copper_db, bronze_db, "pinecone")
+import bronze
+count = bronze.derive("ashby", "pinecone")
 print(f"Derived {count} bronze records")
 ```
 
