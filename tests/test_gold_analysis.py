@@ -98,6 +98,7 @@ def test_build_historical_dataset_derives_first_last_and_active_flags():
     row2 = hist.loc[hist["job_id"] == "2"].iloc[0]
     assert row1["first_seen"].strftime("%Y-%m-%d") == "2026-01-01"
     assert row1["last_seen"].strftime("%Y-%m-%d") == "2026-02-15"
+    assert row1["month_posted"] == pd.Period("2026-01", freq="M")
     assert bool(row1["is_active"]) is True
     assert bool(row2["is_active"]) is False
     assert set(hist_salary["job_id"]) == {"1"}
@@ -184,6 +185,30 @@ def test_build_active_closed_comparison_returns_status_summaries():
     assert "Director+" not in comparison["seniority_counts"].index
     assert comparison["salary_summary"].loc["Active", "count"] == 1
     assert comparison["salary_summary"].loc["Closed", "median"] == 170000
+
+
+def test_build_active_closed_comparison_handles_missing_salary_status():
+    hist = pd.DataFrame(
+        [
+            {"job_id": "1", "department": "Engineering", "seniority": "Senior", "is_active": True},
+            {"job_id": "2", "department": "Product", "seniority": "Manager", "is_active": False},
+        ]
+    )
+    hist_salary = pd.DataFrame(
+        [
+            {"job_id": "2", "mid_usd": 180000, "is_active": False},
+        ]
+    )
+
+    comparison = build_active_closed_comparison(
+        hist,
+        hist_salary,
+        seniority_order=["Senior", "Manager"],
+    )
+
+    assert comparison["salary_summary"].loc["Active", "count"] == 0
+    assert pd.isna(comparison["salary_summary"].loc["Active", "median"])
+    assert comparison["salary_summary"].loc["Closed", "count"] == 1
 
 
 def test_summarize_recurring_roles_tracks_salary_change_by_normalized_title():

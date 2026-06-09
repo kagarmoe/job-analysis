@@ -195,6 +195,7 @@ def build_historical_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     temporal["is_active"] = temporal["last_seen"] == latest_date
 
     hist = hist.drop_duplicates(subset="job_id").merge(temporal, on="job_id")
+    hist["month_posted"] = hist["first_seen"].dt.to_period("M")
     add_usd_salary(hist)
     hist_salary = hist.dropna(subset=["salary_min", "salary_max"]).copy()
     return hist, hist_salary
@@ -265,6 +266,7 @@ def build_active_closed_comparison(
         .agg(count="count", median="median", mean="mean")
         .reindex(["Active", "Closed"])
     )
+    salary_summary["count"] = salary_summary["count"].fillna(0).astype(int)
 
     return {
         "hist_salary": hist_salary_status,
