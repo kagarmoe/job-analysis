@@ -4,6 +4,7 @@ import re
 from typing import Final
 
 import pandas as pd
+from classify import add_usd_salary
 
 SKILL_KEYWORDS: Final[dict[str, str]] = {
     "Python": r"\bPython\b",
@@ -178,3 +179,121 @@ def select_role_gap_comparables(
     comparables = _filter(scope_tolerance=3, same_department=False)
     return comparables, 3, "cross_department_scope_3"
 
+
+def build_historical_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Build one row per job with first/last seen timestamps and active status."""
+    hist = df.copy()
+    hist["job_id"] = hist["job_id"].astype(str)
+    hist["source_dt"] = pd.to_datetime(hist["source_date"].astype(str).str[:8], format="%Y%m%d")
+
+    temporal = (
+        hist.groupby("job_id")["source_dt"]
+        .agg(first_seen="min", last_seen="max")
+        .reset_index()
+    )
+    latest_date = hist["source_dt"].max()
+    temporal["is_active"] = temporal["last_seen"] == latest_date
+
+    hist = hist.drop_duplicates(subset="job_id").merge(temporal, on="job_id")
+    add_usd_salary(hist)
+    hist_salary = hist.dropna(subset=["salary_min", "salary_max"]).copy()
+    return hist, hist_salary
+
+
+def build_active_role_timeseries(hist: pd.DataFrame, freq: str = "W") -> pd.DataFrame:
+    """Count how many roles were active at each point in a date range."""
+    if hist.empty:
+        return pd.DataFrame(columns=["date", "active_roles"])
+
+    date_range = pd.date_range(hist["first_seen"].min(), hist["last_seen"].max(), freq=freq)
+    rows = []
+    for date in date_range:
+        active_roles = ((hist["first_seen"] <= date) & (hist["last_seen"] >= date)).sum()
+        rows.append({"date": date, "active_roles": int(active_roles)})
+    return pd.DataFrame(rows)
+
+
+def summarize_recurring_roles(
+    hist_salary: pd.DataFrame,
+    *,
+    min_postings: int = 2,
+) -> pd.DataFrame:
+    """Summarize salary changes for normalized titles posted multiple times."""
+    recurring = hist_salary.copy()
+    recurring["title_norm"] = recurring["title"].str.strip().str.lower()
+    recurring = recurring.sort_values(["title_norm", "first_seen"])
+
+    summary = (
+        recurring.groupby("title_norm")
+        .agg(
+            postings=("job_id", "nunique"),
+            min_date=("first_seen", "min"),
+            max_date=("first_seen", "max"),
+            earliest_mid=("mid_usd", "first"),
+            latest_mid=("mid_usd", "last"),
+            display_title=("title", "first"),
+        )
+        .query("postings >= @min_postings")
+        .copy()
+    )
+    summary["salary_change_pct"] = (
+        (summary["latest_mid"] - summary["earliest_mid"]) / summary["earliest_mid"] * 100
+    )
+    return summary.sort_values("postings", ascending=False)
+
+
+_SKILL_PHRASE_STOPWORDS: Final[set[str]] = {
+    "the", "and", "for", "with", "that", "this", "you", "will",
+    "our", "are", "from", "have", "your", "about", "been", "more",
+    "their", "into", "also", "who", "can", "all", "has", "than",
+    "its", "may", "other", "new", "not", "but", "what", "which",
+    "when", "how", "each", "some", "such", "both", "between",
+    "should", "would", "could", "across", "within", "including",
+    "through", "well", "these", "those", "ability", "experience",
+    "work", "working", "team", "role", "join", "looking", "ideal",
+    "candidate", "strong", "years", "minimum", "preferred", "plus",
+}
+
+
+def extract_skill_phrases(
+    description: object,
+    *,
+    top_n: int = 12,
+    min_count: int = 2,
+) -> dict[str, int]:
+    """Extract repeated bigram phrases from a description as skill signals."""
+    if not isinstance(description, str):
+        return {}
+
+    text = re.sub(r"[^a-z\s-]", " ", description.lower())
+    words = [word for word in text.split() if word not in _SKILL_PHRASE_STOPWORDS and len(word) > 2]
+    bigrams = [f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1)]
+    counts = pd.Series(bigrams).value_counts()
+    counts = counts[counts >= min_count]
+    if counts.empty:
+        return {}
+    return counts.head(top_n).astype(int).to_dict()
+
+
+def build_skill_overlap_matrix(
+    roles: pd.DataFrame,
+    skill_phrases: dict[str, int],
+    *,
+    max_roles: int = 20,
+) -> pd.DataFrame:
+    """Build a role x phrase count matrix for role-gap skills overlap."""
+    if roles.empty or not skill_phrases:
+        return pd.DataFrame()
+
+    trimmed = roles.drop_duplicates(subset="job_id").head(max_roles)
+    scores: dict[str, dict[str, int]] = {}
+    for _, row in trimmed.iterrows():
+        desc = str(row.get("description_md", "")).lower()
+        role_scores = {
+            phrase: len(re.findall(re.escape(phrase), desc))
+            for phrase in skill_phrases
+        }
+        scores[str(row["title"])[:45]] = role_scores
+
+    overlap = pd.DataFrame(scores).T
+    return overlap.loc[:, overlap.sum() > 0]

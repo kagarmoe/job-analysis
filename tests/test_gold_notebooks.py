@@ -29,9 +29,21 @@ def test_nlp_notebook_uses_shared_gold_helpers():
 def test_role_gap_notebook_uses_shared_scope_and_yoe_helpers():
     source = _notebook_source("analyze_role_gap.ipynb")
     assert (
-        "from gold_analysis import extract_required_yoe, score_scope, select_role_gap_comparables"
+        "from gold_analysis import build_skill_overlap_matrix, extract_required_yoe, extract_skill_phrases, score_scope, select_role_gap_comparables"
         in source
     )
     assert "def score_scope" not in source
     assert "BUILDER_PATTERNS" not in source
     assert "def extract_yoe" not in source
+    assert "def extract_skill_phrases" not in source
+
+
+def test_historical_notebook_uses_shared_temporal_helpers():
+    source = _notebook_source("analyze_historical.ipynb")
+    assert (
+        "from gold_analysis import build_active_role_timeseries, build_historical_dataset, summarize_recurring_roles"
+        in source
+    )
+    assert "temporal = df.groupby(\"job_id\")" not in source
+    assert "for d in date_range:" not in source
+    assert "title_counts = hist_salary.groupby(\"title_norm\")" not in source

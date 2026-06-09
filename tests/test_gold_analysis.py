@@ -1,10 +1,15 @@
 import pandas as pd
 
 from gold_analysis import (
+    build_active_role_timeseries,
+    build_historical_dataset,
+    build_skill_overlap_matrix,
     extract_required_yoe,
+    extract_skill_phrases,
     score_scope,
     select_role_gap_comparables,
     split_locations,
+    summarize_recurring_roles,
 )
 
 
@@ -71,3 +76,94 @@ def test_select_role_gap_comparables_prefers_same_department_then_relaxes():
     assert set(comparables["job_id"]) == {"eng-1", "eng-2", "eng-3", "prod-1", "prod-2"}
     assert tolerance == 3
     assert strategy == "cross_department_scope_3"
+
+
+def test_build_historical_dataset_derives_first_last_and_active_flags():
+    df = pd.DataFrame(
+        [
+            {"job_id": "1", "source_date": "20260101", "salary_min": 100000, "salary_max": 150000, "currency": "USD"},
+            {"job_id": "1", "source_date": "20260215", "salary_min": 100000, "salary_max": 150000, "currency": "USD"},
+            {"job_id": "2", "source_date": "20260120", "salary_min": None, "salary_max": None, "currency": None},
+            {"job_id": "2", "source_date": "20260125", "salary_min": None, "salary_max": None, "currency": None},
+        ]
+    )
+
+    hist, hist_salary = build_historical_dataset(df)
+
+    assert set(hist["job_id"]) == {"1", "2"}
+    row1 = hist.loc[hist["job_id"] == "1"].iloc[0]
+    row2 = hist.loc[hist["job_id"] == "2"].iloc[0]
+    assert row1["first_seen"].strftime("%Y-%m-%d") == "2026-01-01"
+    assert row1["last_seen"].strftime("%Y-%m-%d") == "2026-02-15"
+    assert bool(row1["is_active"]) is True
+    assert bool(row2["is_active"]) is False
+    assert set(hist_salary["job_id"]) == {"1"}
+
+
+def test_build_active_role_timeseries_counts_open_roles_over_time():
+    hist = pd.DataFrame(
+        [
+            {"job_id": "1", "first_seen": pd.Timestamp("2026-01-01"), "last_seen": pd.Timestamp("2026-01-15")},
+            {"job_id": "2", "first_seen": pd.Timestamp("2026-01-10"), "last_seen": pd.Timestamp("2026-01-20")},
+        ]
+    )
+
+    series = build_active_role_timeseries(hist, freq="5D")
+
+    assert list(series["date"].dt.strftime("%Y-%m-%d")) == [
+        "2026-01-01",
+        "2026-01-06",
+        "2026-01-11",
+        "2026-01-16",
+    ]
+    assert list(series["active_roles"]) == [1, 1, 2, 1]
+
+
+def test_summarize_recurring_roles_tracks_salary_change_by_normalized_title():
+    hist_salary = pd.DataFrame(
+        [
+            {"job_id": "1", "title": "Senior Engineer", "first_seen": pd.Timestamp("2026-01-01"), "mid_usd": 180000},
+            {"job_id": "2", "title": " senior engineer ", "first_seen": pd.Timestamp("2026-03-01"), "mid_usd": 210000},
+            {"job_id": "3", "title": "Product Manager", "first_seen": pd.Timestamp("2026-02-01"), "mid_usd": 170000},
+        ]
+    )
+
+    recurring = summarize_recurring_roles(hist_salary)
+
+    assert list(recurring.index) == ["senior engineer"]
+    row = recurring.iloc[0]
+    assert row["postings"] == 2
+    assert row["display_title"] == "Senior Engineer"
+    assert row["earliest_mid"] == 180000
+    assert row["latest_mid"] == 210000
+    assert round(row["salary_change_pct"], 1) == 16.7
+
+
+def test_extract_skill_phrases_returns_repeated_meaningful_bigrams():
+    text = """
+    You will build distributed systems and improve distributed systems reliability.
+    The role owns model serving and model serving performance.
+    """
+    phrases = extract_skill_phrases(text, top_n=5, min_count=2)
+    assert phrases == {"distributed systems": 2, "model serving": 2}
+
+
+def test_build_skill_overlap_matrix_scores_roles_on_target_phrases():
+    roles = pd.DataFrame(
+        [
+            {"job_id": "1", "title": "Target Role", "description_md": "distributed systems distributed systems model serving"},
+            {"job_id": "2", "title": "Comparable Role", "description_md": "model serving and distributed systems"},
+            {"job_id": "3", "title": "Other Role", "description_md": "finance operations"},
+        ]
+    )
+
+    overlap = build_skill_overlap_matrix(
+        roles,
+        {"distributed systems": 2, "model serving": 2},
+    )
+
+    assert list(overlap.index) == ["Target Role", "Comparable Role", "Other Role"]
+    assert list(overlap.columns) == ["distributed systems", "model serving"]
+    assert overlap.loc["Target Role", "distributed systems"] == 2
+    assert overlap.loc["Comparable Role", "model serving"] == 1
+    assert overlap.loc["Other Role", "distributed systems"] == 0
