@@ -9,8 +9,10 @@ from gold_analysis import (
     build_historical_dataset,
     build_monthly_hiring_activity,
     build_quarterly_salary_stats,
+    build_cluster_profiles,
     build_skill_overlap_matrix,
     build_skill_mention_counts,
+    build_tfidf_cluster_projection,
     build_time_to_fill_dataset,
     build_yoe_dataset,
     extract_required_yoe,
@@ -141,6 +143,87 @@ def test_build_education_requirement_summary_counts_overall_and_by_department():
     assert edu_dept.loc["Engineering", "Bachelor"] == 50
     assert edu_dept.loc["Engineering", "Master"] == 50
     assert edu_dept.loc["Product", "Bachelor"] == 0
+
+
+def test_build_tfidf_cluster_projection_skips_small_corpus():
+    jobs = pd.DataFrame(
+        [
+            {"description_md": "python platform systems", "department": "Engineering"},
+            {"description_md": "product research strategy", "department": "Product"},
+        ]
+    )
+
+    result = build_tfidf_cluster_projection(jobs, min_documents=3)
+
+    assert len(result.df_cluster) == 2
+    assert result.tfidf is None
+    assert result.km is None
+    assert result.skipped_reason == "Not enough job descriptions for clustering (2 available, need 3+). Skipping."
+
+
+def test_build_tfidf_cluster_projection_retries_then_clusters_sparse_corpus():
+    jobs = pd.DataFrame(
+        [
+            {"description_md": f"uniquealpha{i} uniquebeta{i}", "department": "Engineering", "mid_usd": 100000 + i}
+            for i in range(10)
+        ]
+    )
+
+    result = build_tfidf_cluster_projection(jobs, min_documents=10, max_clusters=4)
+
+    assert result.initial_error is not None
+    assert "After pruning, no terms remain" in result.initial_error
+    assert result.skipped_reason is None
+    assert result.tfidf is not None
+    assert result.tfidf_matrix is not None
+    assert result.svd is not None
+    assert result.km is not None
+    assert result.tfidf_matrix.shape[0] == 10
+    assert {"x", "y", "cluster"}.issubset(result.df_cluster.columns)
+    assert result.df_cluster["cluster"].nunique() <= 4
+    assert result.svd_explained_variance_pct >= 0
+
+
+def test_build_tfidf_cluster_projection_reports_retry_failure():
+    jobs = pd.DataFrame(
+        [
+            {"description_md": "and the or but", "department": "Engineering"}
+            for _ in range(10)
+        ]
+    )
+
+    result = build_tfidf_cluster_projection(jobs, min_documents=10)
+
+    assert result.initial_error is not None
+    assert result.retry_error is not None
+    assert result.tfidf is None
+    assert result.km is None
+    assert result.skipped_reason is not None
+    assert result.skipped_reason.startswith("TF-IDF unavailable after retry")
+
+
+def test_build_cluster_profiles_summarizes_terms_departments_and_salary():
+    jobs = pd.DataFrame(
+        [
+            {"description_md": f"uniquealpha{i} uniquebeta{i}", "department": "Engineering", "mid_usd": 100000 + i}
+            for i in range(10)
+        ]
+    )
+    result = build_tfidf_cluster_projection(jobs, min_documents=10, max_clusters=3)
+
+    profiles = build_cluster_profiles(result, top_terms=3)
+
+    assert not profiles.empty
+    assert set(profiles.columns) == {
+        "cluster",
+        "role_count",
+        "top_terms",
+        "top_departments",
+        "median_salary",
+    }
+    assert profiles["role_count"].sum() == len(result.df_cluster)
+    assert all(isinstance(terms, list) for terms in profiles["top_terms"])
+    assert all(isinstance(departments, str) for departments in profiles["top_departments"])
 
 
 def test_score_scope_rewards_builder_and_owner_language():

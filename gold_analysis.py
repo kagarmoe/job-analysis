@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import re
-from typing import Final
+from typing import Any, Final
 
 import pandas as pd
 from classify import add_usd_salary
+from sklearn.cluster import KMeans
+from sklearn.decomposition import TruncatedSVD
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 SKILL_KEYWORDS: Final[dict[str, str]] = {
     "Python": r"\bPython\b",
@@ -104,6 +108,21 @@ _YOE_RE = re.compile(
     r"(?:experience|work))?",
     re.I,
 )
+
+
+@dataclass
+class TfidfClusterResult:
+    """Container for TF-IDF projection and clustering outputs."""
+
+    df_cluster: pd.DataFrame
+    tfidf: TfidfVectorizer | None = None
+    tfidf_matrix: Any | None = None
+    svd: TruncatedSVD | None = None
+    km: KMeans | None = None
+    svd_explained_variance_pct: float | None = None
+    skipped_reason: str | None = None
+    initial_error: str | None = None
+    retry_error: str | None = None
 
 
 def split_locations(location: object) -> list[str]:
@@ -236,6 +255,122 @@ def build_education_requirement_summary(
             count = dept_descs.str.contains(pattern, flags=re.I, na=False).sum()
             edu_dept.loc[department, label] = count / len(dept_descs) * 100 if len(dept_descs) > 0 else 0
     return edu_series, edu_dept
+
+
+def build_tfidf_cluster_projection(
+    df: pd.DataFrame,
+    *,
+    text_col: str = "description_md",
+    min_documents: int = 10,
+    max_features: int = 3000,
+    max_df: float = 0.85,
+    max_clusters: int = 8,
+    random_state: int = 42,
+) -> TfidfClusterResult:
+    """Build TF-IDF features, 2D SVD coordinates, and KMeans cluster labels."""
+    if text_col not in df.columns:
+        df_cluster = df.iloc[0:0].copy()
+    else:
+        df_cluster = df.dropna(subset=[text_col]).copy()
+
+    if len(df_cluster) < min_documents:
+        return TfidfClusterResult(
+            df_cluster=df_cluster,
+            skipped_reason=(
+                f"Not enough job descriptions for clustering "
+                f"({len(df_cluster)} available, need {min_documents}+). Skipping."
+            ),
+        )
+
+    n_docs = len(df_cluster)
+    min_df = max(2, n_docs // 20)
+    tfidf = TfidfVectorizer(
+        max_features=max_features,
+        stop_words="english",
+        min_df=min_df,
+        max_df=max_df,
+        ngram_range=(1, 2),
+    )
+
+    initial_error = None
+    try:
+        tfidf_matrix = tfidf.fit_transform(df_cluster[text_col])
+    except ValueError as e:
+        initial_error = str(e)
+        tfidf.set_params(min_df=1, max_df=1.0)
+        try:
+            tfidf_matrix = tfidf.fit_transform(df_cluster[text_col])
+        except ValueError as e2:
+            retry_error = str(e2)
+            return TfidfClusterResult(
+                df_cluster=df_cluster,
+                skipped_reason=f"TF-IDF unavailable after retry ({retry_error}). Skipping clustering.",
+                initial_error=initial_error,
+                retry_error=retry_error,
+            )
+
+    n_components = min(2, tfidf_matrix.shape[1])
+    svd = TruncatedSVD(n_components=n_components, random_state=random_state)
+    coords = svd.fit_transform(tfidf_matrix)
+    df_cluster["x"] = coords[:, 0]
+    df_cluster["y"] = coords[:, 1] if coords.shape[1] > 1 else 0.0
+
+    n_clusters = min(max_clusters, len(df_cluster))
+    km = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
+    df_cluster["cluster"] = km.fit_predict(tfidf_matrix)
+
+    return TfidfClusterResult(
+        df_cluster=df_cluster,
+        tfidf=tfidf,
+        tfidf_matrix=tfidf_matrix,
+        svd=svd,
+        km=km,
+        svd_explained_variance_pct=float(svd.explained_variance_ratio_.sum() * 100),
+        initial_error=initial_error,
+    )
+
+
+def build_cluster_profiles(
+    result: TfidfClusterResult,
+    *,
+    top_terms: int = 8,
+    top_departments: int = 3,
+    department_col: str = "department",
+    salary_col: str = "mid_usd",
+) -> pd.DataFrame:
+    """Summarize each TF-IDF cluster with terms, department mix, and median salary."""
+    columns = ["cluster", "role_count", "top_terms", "top_departments", "median_salary"]
+    if result.tfidf is None or result.km is None or "cluster" not in result.df_cluster.columns:
+        return pd.DataFrame(columns=columns)
+
+    feature_names = result.tfidf.get_feature_names_out()
+    order = result.km.cluster_centers_.argsort()[:, ::-1]
+    rows = []
+    for cluster in range(result.km.n_clusters):
+        cluster_rows = result.df_cluster[result.df_cluster["cluster"] == cluster]
+        top_term_values = [feature_names[i] for i in order[cluster, :top_terms]]
+        if department_col in cluster_rows.columns:
+            top_dept = cluster_rows[department_col].value_counts().head(top_departments)
+            department_summary = ", ".join(
+                f"{department} ({count})" for department, count in top_dept.items()
+            )
+        else:
+            department_summary = ""
+        median_salary = (
+            cluster_rows[salary_col].median()
+            if salary_col in cluster_rows.columns
+            else pd.NA
+        )
+        rows.append(
+            {
+                "cluster": cluster,
+                "role_count": int(len(cluster_rows)),
+                "top_terms": top_term_values,
+                "top_departments": department_summary,
+                "median_salary": median_salary,
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)
 
 
 def score_scope(description: object) -> int:

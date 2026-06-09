@@ -41,7 +41,7 @@ def test_salary_notebook_uses_shared_location_helper_and_generic_labels():
 def test_nlp_notebook_uses_shared_gold_helpers():
     source = _notebook_source("analyze_nlp.ipynb")
     assert (
-        "from gold_analysis import build_department_skill_matrix, build_education_requirement_summary, build_skill_mention_counts, build_yoe_dataset, summarize_yoe_by_department"
+        "from gold_analysis import build_cluster_profiles, build_department_skill_matrix, build_education_requirement_summary, build_skill_mention_counts, build_tfidf_cluster_projection, build_yoe_dataset, summarize_yoe_by_department"
         in source
     )
     assert "def extract_yoe" not in source
@@ -55,8 +55,19 @@ def test_nlp_notebook_uses_shared_gold_helpers():
     assert "edu_counts = {}" not in source
     assert "for label, pattern in EDU_PATTERNS.items()" not in source
     assert "edu_dept = pd.DataFrame" not in source
+    assert "from sklearn.feature_extraction.text import TfidfVectorizer" not in source
+    assert "from sklearn.decomposition import TruncatedSVD" not in source
+    assert "from sklearn.cluster import KMeans" not in source
+    assert "df_cluster = df_nlp.dropna(subset=[\"description_md\"]).copy()" not in source
+    assert "tfidf.fit_transform" not in source
+    assert "svd.fit_transform" not in source
+    assert "KMeans(n_clusters=" not in source
+    assert "km.fit_predict" not in source
+    assert "km.cluster_centers_" not in source
     assert "retrying with min_df=1, max_df=1.0" in source
     assert "TF-IDF unavailable after retry" in source
+    assert "cluster_result = build_tfidf_cluster_projection(df_nlp)" in source
+    assert "cluster_profiles = build_cluster_profiles(cluster_result)" in source
 
 
 def test_role_gap_notebook_uses_shared_scope_and_yoe_helpers():
