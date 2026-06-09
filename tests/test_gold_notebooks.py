@@ -2,12 +2,32 @@ import json
 from pathlib import Path
 
 
+GOLD_NOTEBOOKS = [
+    "analyze_salaries.ipynb",
+    "analyze_nlp.ipynb",
+    "analyze_historical.ipynb",
+    "analyze_role_gap.ipynb",
+]
+
+
 def _notebook_source(path: str) -> str:
     notebook = json.loads(Path(path).read_text())
     return "\n\n".join(
         "".join(cell.get("source", [])) if isinstance(cell.get("source"), list) else cell.get("source", "")
         for cell in notebook["cells"]
     )
+
+
+def test_gold_notebook_code_cells_are_syntactically_valid():
+    for path in GOLD_NOTEBOOKS:
+        notebook = json.loads(Path(path).read_text())
+        for index, cell in enumerate(notebook["cells"]):
+            if cell.get("cell_type") != "code":
+                continue
+            source = cell.get("source", "")
+            if isinstance(source, list):
+                source = "".join(source)
+            compile(source, f"{path}:cell-{index}", "exec")
 
 
 def test_salary_notebook_uses_shared_location_helper_and_generic_labels():
