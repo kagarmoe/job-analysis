@@ -232,6 +232,48 @@ def build_time_to_fill_dataset(hist: pd.DataFrame) -> pd.DataFrame:
     return closed[closed["days_open"] > 0].copy()
 
 
+def _status_counts(df: pd.DataFrame, group_col: str) -> pd.DataFrame:
+    status_counts = df.groupby([group_col, "is_active"]).size().unstack(fill_value=0)
+    status_counts = status_counts.rename(columns={False: "Closed", True: "Active"})
+    for status in ["Closed", "Active"]:
+        if status not in status_counts.columns:
+            status_counts[status] = 0
+    return status_counts[["Closed", "Active"]]
+
+
+def build_active_closed_comparison(
+    hist: pd.DataFrame,
+    hist_salary: pd.DataFrame,
+    seniority_order: list[str],
+) -> dict[str, pd.DataFrame]:
+    """Build salary, department, and seniority summaries by active/closed status."""
+    hist_salary_status = hist_salary.copy()
+    hist_salary_status["status"] = hist_salary_status["is_active"].map(
+        {True: "Active", False: "Closed"}
+    )
+
+    dept_counts = _status_counts(hist, "department")
+    dept_pct = dept_counts.div(dept_counts.sum(axis=0).replace(0, pd.NA), axis=1)
+    dept_pct = (dept_pct * 100).fillna(0).sort_values("Active", ascending=True)
+
+    seniority_counts = _status_counts(hist, "seniority")
+    seniority_existing = [s for s in seniority_order if s in seniority_counts.index]
+    seniority_counts = seniority_counts.reindex(seniority_existing)
+
+    salary_summary = (
+        hist_salary_status.groupby("status")["mid_usd"]
+        .agg(count="count", median="median", mean="mean")
+        .reindex(["Active", "Closed"])
+    )
+
+    return {
+        "hist_salary": hist_salary_status,
+        "dept_pct": dept_pct,
+        "seniority_counts": seniority_counts,
+        "salary_summary": salary_summary,
+    }
+
+
 def summarize_recurring_roles(
     hist_salary: pd.DataFrame,
     *,

@@ -2,10 +2,11 @@ import pandas as pd
 
 from gold_analysis import (
     build_active_role_timeseries,
+    build_active_closed_comparison,
     build_historical_dataset,
     build_monthly_hiring_activity,
-    build_time_to_fill_dataset,
     build_skill_overlap_matrix,
+    build_time_to_fill_dataset,
     extract_required_yoe,
     extract_skill_phrases,
     score_scope,
@@ -151,6 +152,38 @@ def test_build_time_to_fill_dataset_filters_zero_day_roles():
 
     assert list(closed_valid["job_id"]) == ["1"]
     assert int(closed_valid.iloc[0]["days_open"]) == 2
+
+
+def test_build_active_closed_comparison_returns_status_summaries():
+    hist = pd.DataFrame(
+        [
+            {"job_id": "1", "department": "Engineering", "seniority": "Senior", "is_active": True},
+            {"job_id": "2", "department": "Engineering", "seniority": "Senior", "is_active": False},
+            {"job_id": "3", "department": "Product", "seniority": "Manager", "is_active": False},
+        ]
+    )
+    hist_salary = pd.DataFrame(
+        [
+            {"job_id": "1", "mid_usd": 220000, "is_active": True},
+            {"job_id": "2", "mid_usd": 180000, "is_active": False},
+            {"job_id": "3", "mid_usd": 160000, "is_active": False},
+        ]
+    )
+
+    comparison = build_active_closed_comparison(
+        hist,
+        hist_salary,
+        seniority_order=["Senior", "Manager", "Director+"],
+    )
+
+    assert list(comparison["hist_salary"]["status"]) == ["Active", "Closed", "Closed"]
+    assert comparison["dept_pct"].loc["Engineering", "Active"] == 100
+    assert comparison["dept_pct"].loc["Engineering", "Closed"] == 50
+    assert comparison["seniority_counts"].loc["Senior", "Active"] == 1
+    assert comparison["seniority_counts"].loc["Manager", "Closed"] == 1
+    assert "Director+" not in comparison["seniority_counts"].index
+    assert comparison["salary_summary"].loc["Active", "count"] == 1
+    assert comparison["salary_summary"].loc["Closed", "median"] == 170000
 
 
 def test_summarize_recurring_roles_tracks_salary_change_by_normalized_title():
