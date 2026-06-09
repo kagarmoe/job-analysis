@@ -95,7 +95,10 @@ def merge_to_silver(job_id: str, page_rows: dict[str, Any]) -> dict | None:
         record["location"] = _location_name(job.get("location"))
         record["url"] = job.get("jobUrl") or job.get("absolute_url", "")
         record["department_raw"] = _department_raw(job)
-        _add_salary_from_html(record, job.get("content", ""))
+        content_html = job.get("content", "")
+        if content_html:
+            record["description_md"] = _md(content_html)
+            _add_salary_from_html(record, content_html)
 
     if app:
         try:
@@ -159,12 +162,12 @@ def process(
         (company,),
     ).fetchall()
 
-    by_job: dict[str, dict[str, Any]] = defaultdict(dict)
+    by_snapshot: dict[tuple[str, str], dict[str, Any]] = defaultdict(dict)
     for row in rows:
-        by_job[row["job_id"]][row["page_type"]] = row
+        by_snapshot[(row["job_id"], row["source_date"])][row["page_type"]] = row
 
     processed = upserted = rejected = 0
-    for job_id, page_rows in by_job.items():
+    for (job_id, _source_date), page_rows in by_snapshot.items():
         record = merge_to_silver(job_id, page_rows)
         if record is None:
             _reject_unusable(silver_conn, company, job_id)
