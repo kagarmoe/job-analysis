@@ -213,6 +213,25 @@ def build_active_role_timeseries(hist: pd.DataFrame, freq: str = "W") -> pd.Data
     return pd.DataFrame(rows)
 
 
+def build_monthly_hiring_activity(hist: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """Count monthly new postings and monthly closings."""
+    monthly_hist = hist.copy()
+    monthly_hist["month_posted"] = monthly_hist["first_seen"].dt.to_period("M")
+    monthly_new = monthly_hist.groupby("month_posted").size()
+
+    closed = monthly_hist[~monthly_hist["is_active"]].copy()
+    closed["month_closed"] = closed["last_seen"].dt.to_period("M")
+    monthly_closed = closed.groupby("month_closed").size()
+    return monthly_new, monthly_closed
+
+
+def build_time_to_fill_dataset(hist: pd.DataFrame) -> pd.DataFrame:
+    """Return closed roles with a positive open duration."""
+    closed = hist[~hist["is_active"]].copy()
+    closed["days_open"] = (closed["last_seen"] - closed["first_seen"]).dt.days
+    return closed[closed["days_open"] > 0].copy()
+
+
 def summarize_recurring_roles(
     hist_salary: pd.DataFrame,
     *,

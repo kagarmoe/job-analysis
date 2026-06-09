@@ -3,6 +3,8 @@ import pandas as pd
 from gold_analysis import (
     build_active_role_timeseries,
     build_historical_dataset,
+    build_monthly_hiring_activity,
+    build_time_to_fill_dataset,
     build_skill_overlap_matrix,
     extract_required_yoe,
     extract_skill_phrases,
@@ -117,6 +119,38 @@ def test_build_active_role_timeseries_counts_open_roles_over_time():
         "2026-01-16",
     ]
     assert list(series["active_roles"]) == [1, 1, 2, 1]
+
+
+def test_build_monthly_hiring_activity_counts_new_and_closed_roles():
+    hist = pd.DataFrame(
+        [
+            {"job_id": "1", "first_seen": pd.Timestamp("2026-01-01"), "last_seen": pd.Timestamp("2026-01-20"), "is_active": False},
+            {"job_id": "2", "first_seen": pd.Timestamp("2026-01-15"), "last_seen": pd.Timestamp("2026-01-30"), "is_active": False},
+            {"job_id": "3", "first_seen": pd.Timestamp("2026-02-10"), "last_seen": pd.Timestamp("2026-03-01"), "is_active": True},
+        ]
+    )
+
+    monthly_new, monthly_closed = build_monthly_hiring_activity(hist)
+
+    assert monthly_new.loc[pd.Period("2026-01", freq="M")] == 2
+    assert monthly_new.loc[pd.Period("2026-02", freq="M")] == 1
+    assert monthly_closed.loc[pd.Period("2026-01", freq="M")] == 2
+    assert monthly_closed.index.dtype.name == "period[M]"
+
+
+def test_build_time_to_fill_dataset_filters_zero_day_roles():
+    hist = pd.DataFrame(
+        [
+            {"job_id": "1", "first_seen": pd.Timestamp("2026-01-01"), "last_seen": pd.Timestamp("2026-01-03"), "is_active": False},
+            {"job_id": "2", "first_seen": pd.Timestamp("2026-01-02"), "last_seen": pd.Timestamp("2026-01-02"), "is_active": False},
+            {"job_id": "3", "first_seen": pd.Timestamp("2026-01-03"), "last_seen": pd.Timestamp("2026-01-10"), "is_active": True},
+        ]
+    )
+
+    closed_valid = build_time_to_fill_dataset(hist)
+
+    assert list(closed_valid["job_id"]) == ["1"]
+    assert int(closed_valid.iloc[0]["days_open"]) == 2
 
 
 def test_summarize_recurring_roles_tracks_salary_change_by_normalized_title():
