@@ -15,8 +15,6 @@ from gold_analysis import (
     build_skill_mention_counts,
     build_tfidf_cluster_projection,
     build_time_to_fill_dataset,
-    build_yoe_dataset,
-    extract_required_yoe,
     extract_skill_phrases,
     split_locations,
     summarize_yoe_by_department,
@@ -32,18 +30,6 @@ def test_split_locations_handles_multi_value_and_missing_inputs():
     ]
     assert split_locations(None) == ["Unknown"]
     assert split_locations("") == ["Unknown"]
-
-
-def test_extract_required_yoe_uses_highest_minimum_requirement():
-    text = """
-    Requires 3-5 years of experience building APIs.
-    You should also have 7+ years of professional software engineering work.
-    """
-    assert extract_required_yoe(text) == 7
-
-
-def test_extract_required_yoe_rejects_out_of_range_values():
-    assert extract_required_yoe("Requires 30+ years of experience.") is None
 
 
 def test_build_skill_mention_counts_counts_matching_descriptions_once_per_role():
@@ -69,6 +55,18 @@ def test_build_skill_mention_counts_counts_matching_descriptions_once_per_role()
     assert counts.to_dict() == {"Java": 1, "Python": 1, "SQL": 1}
 
 
+def test_skill_patterns_go_is_the_language_and_rest_matches_restful():
+    from gold_analysis import SKILL_KEYWORDS
+
+    jobs = pd.DataFrame({"description_md": [
+        "We go fast and ship RESTful APIs",      # verb 'go', RESTful
+        "Services in Go and Rust; REST endpoints",
+        "Golang backend",
+    ]})
+    counts = build_skill_mention_counts(jobs, skill_patterns={"Go": SKILL_KEYWORDS["Go"], "REST": SKILL_KEYWORDS["REST"]})
+    assert counts.to_dict() == {"Go": 2, "REST": 2}
+
+
 def test_build_department_skill_matrix_returns_department_percentages():
     jobs = pd.DataFrame(
         [
@@ -92,29 +90,6 @@ def test_build_department_skill_matrix_returns_department_percentages():
     assert matrix.loc["Engineering", "SQL"] == 50
     assert matrix.loc["Product", "Python"] == 0
     assert matrix.loc["Product", "SQL"] == 50
-
-
-def test_build_yoe_dataset_and_department_summary():
-    jobs = pd.DataFrame(
-        [
-            {"description_md": "Requires 3+ years of experience", "department": "Engineering"},
-            {"description_md": "Requires 5+ years of experience", "department": "Engineering"},
-            {"description_md": "Requires 7+ years of experience", "department": "Engineering"},
-            {"description_md": "Requires 2+ years of experience", "department": "Product"},
-            {"description_md": "No explicit requirement", "department": "Product"},
-        ]
-    )
-
-    with_yoe = build_yoe_dataset(jobs)
-    yoe_jobs = with_yoe.dropna(subset=["yoe"])
-    summary = summarize_yoe_by_department(yoe_jobs, min_count=2)
-
-    assert list(with_yoe["yoe"])[:4] == [3, 5, 7, 2]
-    assert pd.isna(with_yoe.loc[4, "yoe"])
-    assert list(summary.index) == ["Engineering"]
-    assert summary.loc["Engineering", "median"] == 5
-    assert summary.loc["Engineering", "mean"] == 5
-    assert summary.loc["Engineering", "count"] == 3
 
 
 def test_build_education_requirement_summary_counts_overall_and_by_department():
@@ -312,7 +287,7 @@ def test_build_quarterly_salary_stats_returns_empty_contract_without_salary_data
     salary_with_quarter, qtr_stats = build_quarterly_salary_stats(hist_salary)
 
     assert salary_with_quarter.empty
-    assert list(qtr_stats.columns) == ["median", "mean", "count", "std"]
+    assert list(qtr_stats.columns) == ["median", "mean", "count", "q1", "q3"]
     assert qtr_stats.empty
 
 
@@ -340,6 +315,7 @@ def test_build_quarterly_salary_stats_derives_timestamp_index_and_numeric_stats(
     ]
     assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "median"] == 120000
     assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "mean"] == 120000
+    assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "q1"] <= qtr_stats.loc[pd.Timestamp("2026-01-01"), "q3"]
     assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "count"] == 2
     assert qtr_stats["median"].dtype.kind in {"f", "i"}
 
