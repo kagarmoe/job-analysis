@@ -1,7 +1,11 @@
 # Single-Command Pipeline
 
 **Date:** 2026-03-25
-**Status:** Approved
+**Status:** Deprecated
+
+> Deprecated 2026-06-09. This CSV-first plan is retained for historical context.
+> Useful ideas have been carried forward into
+> `docs/plans/2026-06-09-medallion-python-first-recovery-plan.md`.
 
 ## Goal
 

@@ -1,6 +1,11 @@
 # Multi-Company Scraping Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Deprecated 2026-06-09. This CSV-first implementation plan is retained for
+> historical context. Use
+> `docs/plans/2026-06-09-medallion-python-first-recovery-plan.md` instead.
+
+> Historical note: this was originally written as an executable implementation
+> plan for an older assistant workflow.
 
 **Goal:** Generalize the scraping pipeline to support multiple companies/job boards, starting with Crusoe on Ashby.
 

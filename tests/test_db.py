@@ -1,5 +1,4 @@
 import sqlite3
-import json
 import pytest
 import db
 
@@ -38,18 +37,17 @@ def test_store_bronze_idempotent(tmp_path):
     assert count == 1
 
 
-def test_derive_ashby_board_api(tmp_path):
-    copper_conn = db.open_copper("ashby", base_dir=str(tmp_path / "copper"))
-    bronze_conn = db.open_bronze("ashby", base_dir=str(tmp_path / "bronze"))
-    jobs_payload = json.dumps({"jobs": [{"id": "aaa-111", "title": "Eng"}]})
-    db.store_copper(copper_conn,
-                    url="https://api.ashbyhq.com/posting-api/job-board/acme",
-                    http_status=200, content=jobs_payload, source_date="20260101")
-    count = db.derive_ashby(copper_conn, bronze_conn, "acme")
-    assert count == 1
-    row = bronze_conn.execute("SELECT * FROM snapshots WHERE job_id='aaa-111'").fetchone()
-    assert row is not None
-    assert row["page_type"] == "api_board"
+def test_db_does_not_own_board_derivation():
+    assert not hasattr(db, "derive_ashby")
+    assert not hasattr(db, "derive_greenhouse")
+    assert not hasattr(db, "derive_adhoc")
+
+
+def test_db_does_not_own_classification():
+    assert not hasattr(db, "normalize_department")
+    assert not hasattr(db, "classify_work_mode")
+    assert not hasattr(db, "extract_yoe")
+    assert not hasattr(db, "add_usd_salary")
 
 
 def test_open_silver_creates_schema(tmp_path):

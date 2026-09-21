@@ -1,7 +1,12 @@
 # Flexible Role Gap Analysis
 
 **Date:** 2026-03-25
-**Status:** Approved
+**Status:** Deprecated
+
+> Deprecated 2026-06-09. This CSV-based notebook design is retained for
+> historical context. Scope scoring and comparable-role matching remain part of
+> the gold analysis direction in
+> `docs/plans/2026-06-09-medallion-python-first-recovery-plan.md`.
 
 ## Goal
 

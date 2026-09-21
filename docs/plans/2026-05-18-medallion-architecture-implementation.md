@@ -1,6 +1,11 @@
 # Medallion Architecture Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Deprecated 2026-06-09. This plan is retained for history. Use
+> `docs/plans/2026-06-09-medallion-python-first-recovery-plan.md` for the
+> current implementation direction.
+
+> Historical note: this was originally written as an executable implementation
+> plan for an older assistant workflow.
 
 **Goal:** Refactor the job analysis pipeline into four layers — Copper (raw fetch), Bronze (schema), Silver (classify), Gold (analyze) — so that parsing bugs can be fixed by reprocessing existing data without re-scraping.
 

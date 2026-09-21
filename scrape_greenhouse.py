@@ -23,14 +23,14 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def scrape_all_jobs(company: str) -> tuple[list[dict], str]:
+def scrape_all_jobs(company: str, *, copper_base_dir: str = "copper") -> tuple[list[dict], str]:
     """Returns (jobs, source_date). source_date = today as YYYYMMDD."""
     url = f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs"
     log.info("Fetching all jobs from Greenhouse API for %s ...", company)
     resp = requests.get(url, params={"content": "true"}, timeout=30)
     resp.raise_for_status()
     source_date = date.today().strftime("%Y%m%d")
-    copper_db = db.open_copper("greenhouse")
+    copper_db = db.open_copper("greenhouse", base_dir=copper_base_dir)
     db.store_copper(copper_db, url=url, http_status=resp.status_code,
                     content=resp.text, source_date=source_date)
     jobs = resp.json().get("jobs", [])

@@ -1,7 +1,11 @@
 # Medallion Architecture Design
 
 **Date:** 2026-05-18
-**Status:** Approved
+**Status:** Deprecated
+
+> Deprecated 2026-06-09. The medallion architecture remains valid, but the
+> notebook-as-execution-layer direction in this document has been superseded by
+> `docs/plans/2026-06-09-medallion-python-first-recovery-plan.md`.
 
 ## Goal
 

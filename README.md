@@ -1,6 +1,6 @@
 # Job Analysis
 
-Analyze job postings from any company to evaluate salary fairness relative to role scope. Scrapes current and historical job data from Greenhouse and Ashby job boards, then runs automated analysis notebooks.
+Analyze job postings from any company to evaluate salary fairness relative to role scope. Scrapes current and historical job data from Greenhouse and Ashby job boards, then processes it through local SQLite layers.
 
 ## Quick Start
 
@@ -20,18 +20,27 @@ This single command:
 1. **Scrapes current jobs** for the company (writes to `copper/`)
 2. **Scrapes historical jobs** from the Wayback Machine (first run only)
 3. **Runs ETL** through bronze → silver layers
-4. **Runs 4 analysis notebooks** and prints a salary/location summary
+4. **Prints a salary/location summary**
 
-Output notebooks are written to `/tmp/pipeline_out_*.ipynb` — open them in Jupyter to view charts.
+To also execute the optional gold analysis notebooks, pass `--run-notebooks`. Output notebooks are written to `/tmp/pipeline_out_*.ipynb`.
 
 ## Setup
 
-Requires Python 3.10+ and Jupyter. The pipeline uses a kernel named `job-analysis`.
+Requires Python 3.11+ (developed on 3.13). Jupyter is only needed for optional analysis notebooks.
+
+Python 3.10 does not work on macOS 27: its newest scipy (1.15.3) ships Fortran binaries the
+macOS 27 loader rejects, which breaks scikit-learn and the gold NLP analysis. scipy 1.16+
+needs Python 3.11+.
 
 ```bash
-python -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
 pip install requests beautifulsoup4 html2text pandas matplotlib seaborn scikit-learn wordcloud
+```
+
+If you want to run notebooks via `--run-notebooks`, also install a Jupyter kernel:
+
+```bash
 python -m ipykernel install --user --name job-analysis --display-name "Python (job-analysis)"
 ```
 
@@ -72,28 +81,23 @@ python scrape_wayback.py --board greenhouse --company anthropic
 
 ### ETL Layers
 
-Run a layer notebook directly (useful when re-processing after a schema or classifier change):
+Run a layer directly (useful when re-processing after a schema or classifier change):
 
 ```bash
 # Bronze: parse copper → structured per-job records
-# Requires COMPANY and BOARD set in the config cell, or inject them:
-jupyter nbconvert --to notebook --execute bronze.ipynb \
-  --ExecutePreprocessor.kernel_name=job-analysis \
-  --output /tmp/bronze_out.ipynb
+python bronze.py --board ashby --company pinecone
+python bronze.py --board greenhouse --company anthropic
 
 # Silver: classify bronze records → silver/jobs.db
-jupyter nbconvert --to notebook --execute silver.ipynb \
-  --ExecutePreprocessor.kernel_name=job-analysis \
-  --output /tmp/silver_out.ipynb
+python silver.py --board ashby --company pinecone
+python silver.py --board greenhouse --company anthropic
 ```
 
 To re-derive bronze from existing copper without re-scraping:
 
 ```python
-import db
-copper_db = db.open_copper("ashby")
-bronze_db = db.open_bronze("ashby")
-count = db.derive_ashby(copper_db, bronze_db, "pinecone")
+import bronze
+count = bronze.derive("ashby", "pinecone")
 print(f"Derived {count} bronze records")
 ```
 
@@ -162,16 +166,15 @@ Comparables are matched on normalized department + similar scope score (±1).
 
 ## Key Files
 
-- `run_pipeline.py` — Single-command orchestrator. Parses job URL, scrapes, runs layer notebooks, then gold notebooks.
-- `db.py` — All DB utilities: schemas, open/store/derive/upsert/log for every layer, plus salary parsing and classification functions. Imported by scrapers and gold notebooks.
-- `classify.ipynb` — Source of truth for classification functions (department, seniority, work mode, YOE extraction). Loaded by `silver.ipynb` via `%run classify.ipynb`; gold notebooks import the same functions from `db`.
-- `bronze.ipynb` — Copper → bronze ETL (executed by pipeline via nbconvert). Config: `COMPANY`, `BOARD`.
-- `silver.ipynb` — Bronze → silver ETL (executed by pipeline via nbconvert). Config: `COMPANY`, `BOARD`.
-- `copper.ipynb` — Documents the copper schema; shows row counts per board.
+- `run_pipeline.py` — Single-command orchestrator. Parses job URL, scrapes, runs bronze and silver ETL, then prints a summary. Optional `--run-notebooks` executes gold notebooks.
+- `db.py` — Storage utilities: schemas, open/store/upsert/log helpers, plus salary parsing helpers used by bronze/silver.
+- `classify.py` — Source of truth for classification functions (department, seniority, work mode, YOE extraction, USD conversion).
+- `bronze.py` — Copper → bronze ETL. Derives structured board-specific records from raw copper snapshots.
+- `silver.py` — Bronze → silver ETL. Merges page types, classifies jobs, validates rows, writes rejects, and logs runs.
 - `scrape_ashby.py` — Live Ashby scraper. Writes to `copper/ashby.db`.
 - `scrape_greenhouse.py` — Live Greenhouse scraper. Writes to `copper/greenhouse.db`.
 - `scrape_wayback.py` — Wayback Machine historical scraper. Writes to `copper/{board}.db`.
-- `tests/` — pytest suite. `conftest.py` generates `classify.py` from `classify.ipynb` before tests run.
+- `tests/` — pytest suite, including a no-network app smoke test for the core pipeline.
 
 ## Department Taxonomy
 
