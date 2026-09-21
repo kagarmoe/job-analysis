@@ -117,3 +117,20 @@ def test_extract_yoe_no_match():
 
 def test_extract_yoe_none_input():
     assert extract_yoe(None) is None
+
+
+def test_add_usd_salary_annualizes_sub_annual_pay_but_not_mislabeled_annual():
+    import pandas as pd
+    from classify import add_usd_salary
+
+    df = pd.DataFrame({
+        "salary_min": [20, 133000, 100000, 1000, 50000],
+        "salary_max": [30, 182000, 120000, 1500, 60000],
+        "currency": ["USD", "USD", "USD", "USD", "GBP"],
+        # LaunchDarkly writes "$133,000 - $182,000 USD per monthly" (pay frequency, not period)
+        "salary_unit": ["hourly", "monthly", "year", "weekly", None],
+    })
+    add_usd_salary(df)
+
+    assert df["min_usd"].tolist() == [20 * 2080, 133000, 100000, 1000 * 52, 50000 * 1.27]
+    assert df["max_usd"].tolist() == [30 * 2080, 182000, 120000, 1500 * 52, 60000 * 1.27]

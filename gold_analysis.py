@@ -494,6 +494,17 @@ def select_role_gap_comparables(
     return comparables, 3, "cross_department_scope_3"
 
 
+def latest_per_job(df: pd.DataFrame) -> pd.DataFrame:
+    """One row per job: its newest snapshot.
+
+    Silver is keyed on (company, board, job_id, source_date), so a raw load has one row per
+    snapshot and over-weights long-lived roles. source_date is YYYYMMDD or a 14-digit Wayback
+    timestamp; both sort correctly as strings.
+    """
+    order = df["source_date"].astype(str).argsort(kind="stable")
+    return df.iloc[order].drop_duplicates(subset="job_id", keep="last").reset_index(drop=True)
+
+
 def build_historical_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build one row per job with first/last seen timestamps and active status."""
     hist = df.copy()
@@ -508,7 +519,7 @@ def build_historical_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     latest_date = hist["source_dt"].max()
     temporal["is_active"] = temporal["last_seen"] == latest_date
 
-    hist = hist.drop_duplicates(subset="job_id").merge(temporal, on="job_id")
+    hist = latest_per_job(hist).merge(temporal, on="job_id")
     hist["month_posted"] = hist["first_seen"].dt.to_period("M")
     add_usd_salary(hist)
     hist_salary = hist.dropna(subset=["salary_min", "salary_max"]).copy()

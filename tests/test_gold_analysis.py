@@ -580,3 +580,33 @@ def test_build_skill_overlap_matrix_scores_roles_on_target_phrases():
     assert overlap.loc["Target Role", "distributed systems"] == 2
     assert overlap.loc["Comparable Role", "model serving"] == 1
     assert overlap.loc["Other Role", "distributed systems"] == 0
+
+
+def test_latest_per_job_keeps_newest_snapshot_per_job():
+    from gold_analysis import latest_per_job
+
+    # silver is keyed on (company, board, job_id, source_date): one row per snapshot
+    df = pd.DataFrame({
+        "job_id": ["a", "a", "b", "a"],
+        "source_date": ["20260325", "20210707042647", "20260101", "20260609"],
+        "title": ["mid", "oldest", "only", "newest"],
+    })
+    latest = latest_per_job(df)
+
+    assert sorted(latest["title"]) == ["newest", "only"]
+
+
+def test_build_historical_dataset_keeps_latest_snapshot_row():
+    df = pd.DataFrame({
+        "job_id": ["a", "a"],
+        "source_date": ["20260101", "20260609"],
+        "title": ["Writer", "Staff Writer"],
+        "salary_min": [100000, 150000],
+        "salary_max": [120000, 170000],
+        "currency": ["USD", "USD"],
+        "salary_unit": ["annual", "annual"],
+    })
+    hist, _ = build_historical_dataset(df)
+
+    assert hist["title"].tolist() == ["Staff Writer"]
+    assert hist["salary_min"].tolist() == [150000]
