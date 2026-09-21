@@ -505,6 +505,31 @@ def latest_per_job(df: pd.DataFrame) -> pd.DataFrame:
     return df.iloc[order].drop_duplicates(subset="job_id", keep="last").reset_index(drop=True)
 
 
+def coverage_label(df_all: pd.DataFrame, df_salary: pd.DataFrame) -> str:
+    """Chart-title suffix so no salary statistic is read without its n and disclosure rate.
+
+    Disclosure follows pay-transparency law by location, so a "median salary" is really the
+    median of the roles posted where disclosure is required.
+    """
+    total, salaried = len(df_all), len(df_salary)
+    pct = f" ({salaried / total:.0%})" if total else ""
+    return f"n={salaried} of {total} jobs{pct} disclose salary"
+
+
+def data_quality(df: pd.DataFrame) -> str:
+    """One-line header for a notebook's loaded frame; stops charts being read at n=7 unnoticed."""
+    n = len(df)
+    salaried = int(df[["salary_min", "salary_max"]].notna().all(axis=1).sum()) if n else 0
+    described = int(df["description_md"].notna().sum()) if n else 0
+    pct = lambda k: f" ({k / n:.0%})" if n else ""  # noqa: E731
+    dates = df["source_date"].astype(str).str[:8]
+    span = f"{dates.min()[:4]}-{dates.min()[4:6]}-{dates.min()[6:]} to {dates.max()[:4]}-{dates.max()[4:6]}-{dates.max()[6:]}" if n else "none"
+    return (
+        f"DATA QUALITY: {n} jobs | salary disclosed: {salaried}{pct(salaried)} | "
+        f"descriptions: {described}{pct(described)} | snapshots {span}"
+    )
+
+
 def build_historical_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build one row per job with first/last seen timestamps and active status."""
     hist = df.copy()

@@ -123,6 +123,15 @@ def test_role_gap_notebook_does_not_overwrite_usd_with_native_currency():
     assert 'left=row["salary_min"]' not in source
 
 
+def test_every_notebook_prints_data_quality_and_salary_charts_carry_coverage():
+    for path in GOLD_NOTEBOOKS:
+        source = _notebook_source(path)
+        assert "print(data_quality(" in source, path
+        bare = [ln for ln in source.splitlines()
+                if "set_title(" in ln and "Salary" in ln and "COVERAGE_SUFFIX" not in ln]
+        assert bare == [], (path, bare)
+
+
 def test_snapshot_level_notebooks_dedupe_to_latest_per_job():
     for path in ["analyze_salaries.ipynb", "analyze_nlp.ipynb", "analyze_role_gap.ipynb"]:
         assert "latest_per_job(" in _notebook_source(path), path

@@ -610,3 +610,28 @@ def test_build_historical_dataset_keeps_latest_snapshot_row():
 
     assert hist["title"].tolist() == ["Staff Writer"]
     assert hist["salary_min"].tolist() == [150000]
+
+
+def test_coverage_label_reports_n_and_disclosure_rate():
+    from gold_analysis import coverage_label
+
+    df_all = pd.DataFrame({"job_id": ["a", "b", "c", "d"]})
+    df_salary = df_all.iloc[:1]
+    assert coverage_label(df_all, df_salary) == "n=1 of 4 jobs (25%) disclose salary"
+    assert coverage_label(df_all.iloc[:0], df_salary.iloc[:0]) == "n=0 of 0 jobs disclose salary"
+
+
+def test_data_quality_summarises_coverage_and_snapshot_range():
+    from gold_analysis import data_quality
+
+    df = pd.DataFrame({
+        "job_id": ["a", "b"],
+        "salary_min": [1.0, None],
+        "salary_max": [2.0, None],
+        "description_md": ["text", None],
+        "source_date": ["20260101", "20260609120000"],
+    })
+    assert data_quality(df) == (
+        "DATA QUALITY: 2 jobs | salary disclosed: 1 (50%) | descriptions: 1 (50%) | "
+        "snapshots 2026-01-01 to 2026-06-09"
+    )
