@@ -16,7 +16,7 @@ SKILL_KEYWORDS: Final[dict[str, str]] = {
     "Java": r"\bJava\b(?!Script)",
     "JavaScript": r"\bJavaScript\b",
     "TypeScript": r"\bTypeScript\b",
-    "Go": r"\bGo(?:lang)?\b",
+    "Go": r"(?-i:\bGo\b)|\bGolang\b",  # case-sensitive: the verb "go" is in every posting
     "Rust": r"\bRust\b",
     "C/C++": r"\bC\+\+\b|\bC programming\b",
     "SQL": r"\bSQL\b",
@@ -54,7 +54,7 @@ SKILL_KEYWORDS: Final[dict[str, str]] = {
     "Node.js": r"\bNode\.?js\b",
     "APIs": r"\bAPI[s]?\b",
     "GraphQL": r"\bGraphQL\b",
-    "REST": r"\bREST\b(?:ful)?",
+    "REST": r"\bREST(?:ful)?\b",
     "Cross-functional": r"\bcross[- ]?functional\b",
     "Stakeholder mgmt": r"\bstakeholder\b",
     "AI Safety": r"\bAI safety\b|\bsafety research\b",
@@ -495,12 +495,15 @@ def build_historical_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
 def build_quarterly_salary_stats(hist_salary: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Add salary quarters and summarize salary midpoint stats by quarter."""
     salary = hist_salary.copy()
-    qtr_stats_columns = ["median", "mean", "count", "std"]
+    qtr_stats_columns = ["median", "mean", "count", "q1", "q3"]
     if salary.empty:
         return salary, pd.DataFrame(columns=qtr_stats_columns)
 
     salary["quarter"] = pd.to_datetime(salary["first_seen"]).dt.to_period("Q")
-    qtr_stats = salary.groupby("quarter")["mid_usd"].agg(qtr_stats_columns)
+    grouped = salary.groupby("quarter")["mid_usd"]
+    qtr_stats = grouped.agg(["median", "mean", "count"])
+    qtr_stats["q1"] = grouped.quantile(0.25)  # IQR band: median +/- std is not a meaningful quantity
+    qtr_stats["q3"] = grouped.quantile(0.75)
     qtr_stats.index = qtr_stats.index.to_timestamp()
     qtr_stats = qtr_stats.apply(pd.to_numeric, errors="coerce")
     return salary, qtr_stats

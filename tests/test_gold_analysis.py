@@ -69,6 +69,18 @@ def test_build_skill_mention_counts_counts_matching_descriptions_once_per_role()
     assert counts.to_dict() == {"Java": 1, "Python": 1, "SQL": 1}
 
 
+def test_skill_patterns_go_is_the_language_and_rest_matches_restful():
+    from gold_analysis import SKILL_KEYWORDS
+
+    jobs = pd.DataFrame({"description_md": [
+        "We go fast and ship RESTful APIs",      # verb 'go', RESTful
+        "Services in Go and Rust; REST endpoints",
+        "Golang backend",
+    ]})
+    counts = build_skill_mention_counts(jobs, skill_patterns={"Go": SKILL_KEYWORDS["Go"], "REST": SKILL_KEYWORDS["REST"]})
+    assert counts.to_dict() == {"Go": 2, "REST": 2}
+
+
 def test_build_department_skill_matrix_returns_department_percentages():
     jobs = pd.DataFrame(
         [
@@ -312,7 +324,7 @@ def test_build_quarterly_salary_stats_returns_empty_contract_without_salary_data
     salary_with_quarter, qtr_stats = build_quarterly_salary_stats(hist_salary)
 
     assert salary_with_quarter.empty
-    assert list(qtr_stats.columns) == ["median", "mean", "count", "std"]
+    assert list(qtr_stats.columns) == ["median", "mean", "count", "q1", "q3"]
     assert qtr_stats.empty
 
 
@@ -340,6 +352,7 @@ def test_build_quarterly_salary_stats_derives_timestamp_index_and_numeric_stats(
     ]
     assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "median"] == 120000
     assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "mean"] == 120000
+    assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "q1"] <= qtr_stats.loc[pd.Timestamp("2026-01-01"), "q3"]
     assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "count"] == 2
     assert qtr_stats["median"].dtype.kind in {"f", "i"}
 

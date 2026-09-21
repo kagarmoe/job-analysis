@@ -1,6 +1,8 @@
 import re
 from typing import Optional
 
+# Approximate spot rates, set 2026-02-25 (initial commit) and not updated since.
+# Update the date when you update the numbers.
 TO_USD = {
     "USD": 1.0,
     "EUR": 1.05,
