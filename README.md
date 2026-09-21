@@ -26,10 +26,14 @@ To also execute the optional gold analysis notebooks, pass `--run-notebooks`. Ou
 
 ## Setup
 
-Requires Python 3.10+. Jupyter is only needed for optional analysis notebooks.
+Requires Python 3.11+ (developed on 3.13). Jupyter is only needed for optional analysis notebooks.
+
+Python 3.10 does not work on macOS 27: its newest scipy (1.15.3) ships Fortran binaries the
+macOS 27 loader rejects, which breaks scikit-learn and the gold NLP analysis. scipy 1.16+
+needs Python 3.11+.
 
 ```bash
-python -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
 pip install requests beautifulsoup4 html2text pandas matplotlib seaborn scikit-learn wordcloud
 ```
