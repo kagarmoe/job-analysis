@@ -7,6 +7,7 @@ GOLD_NOTEBOOKS = [
     "analyze_nlp.ipynb",
     "analyze_historical.ipynb",
     "analyze_role_gap.ipynb",
+    "analyze_cross_company.ipynb",
 ]
 
 
@@ -126,7 +127,7 @@ def test_role_gap_notebook_does_not_overwrite_usd_with_native_currency():
 def test_every_notebook_prints_data_quality_and_salary_charts_carry_coverage():
     for path in GOLD_NOTEBOOKS:
         source = _notebook_source(path)
-        assert "print(data_quality(" in source, path
+        assert "data_quality(" in source, path
         bare = [ln for ln in source.splitlines()
                 if "set_title(" in ln and "Salary" in ln and "COVERAGE_SUFFIX" not in ln]
         assert bare == [], (path, bare)

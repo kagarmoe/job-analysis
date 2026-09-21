@@ -70,6 +70,7 @@ This scrapes the company's jobs, runs wayback historical (first time only), proc
 - `analyze_salaries.ipynb` — Current salary analysis. Config: `COMPANY`, `BOARD`.
 - `analyze_nlp.ipynb` — NLP & text analysis on job descriptions (requires sklearn + wordcloud). Config: `COMPANY`, `BOARD`.
 - `analyze_historical.ipynb` — Historical hiring trends. Config: `COMPANY`, `BOARD`.
+- `analyze_cross_company.ipynb` — For any role type (`TITLE_PATTERN` regex, e.g. `Technical Writer`, `Forward.Deployed`, `Instructional Design`): every matching salaried role at every scraped company, placed against same-seniority peers at its own company (median, IQR, percentile). Config: `TITLE_PATTERN`, optional `COMPANIES`.
 - `analyze_role_gap.ipynb` — Role gap analysis: compare any job's salary vs. scope-matched comparables. Config: `COMPANY`, `BOARD`, `JOB_ID`.
 
 ## Current Status (2026-06-09)

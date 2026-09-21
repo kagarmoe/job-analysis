@@ -621,6 +621,28 @@ def test_coverage_label_reports_n_and_disclosure_rate():
     assert coverage_label(df_all.iloc[:0], df_salary.iloc[:0]) == "n=0 of 0 jobs disclose salary"
 
 
+def test_build_relative_position_uses_same_seniority_peers_and_flags_thin_pools():
+    from gold_analysis import build_relative_position
+
+    df = pd.DataFrame({
+        "job_id": ["tw", "a", "b", "c", "d", "e", "x"],
+        "title": ["Senior TW", "a", "b", "c", "d", "e", "Staff x"],
+        "seniority": ["Senior"] * 6 + ["Staff / Principal"],
+        "mid_usd": [150.0, 100.0, 200.0, 300.0, 400.0, 500.0, 999.0],
+        "location": ["Remote"] * 7,
+    })
+    pos = build_relative_position(df, "tw")
+
+    assert pos["n"] == 5 and pos["comp_median"] == 300.0
+    assert (pos["q1"], pos["q3"]) == (200.0, 400.0)
+    assert pos["gap_pct"] == -50.0
+    assert pos["percentile"] == 20.0  # one of five peers is below the target
+    assert pos["thin"] is False
+
+    thin = build_relative_position(df.iloc[:3], "tw")
+    assert thin["n"] == 2 and thin["thin"] is True
+
+
 def test_data_quality_summarises_coverage_and_snapshot_range():
     from gold_analysis import data_quality
 
