@@ -339,6 +339,11 @@ def main():
         action="store_true",
         help="Execute optional gold analysis notebooks after ETL",
     )
+    ap.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the summary as one JSON line (last line of stdout) instead of text",
+    )
     args = ap.parse_args()
 
     try:
@@ -346,7 +351,10 @@ def main():
     except Exception as exc:
         log.error("Pipeline failed: %s", exc)
         sys.exit(1)
-    print_summary(summary)
+    if args.json:
+        print(json.dumps({"job": parse_job_url(args.url), "summary": summary}))
+    else:
+        print_summary(summary)
 
 
 if __name__ == "__main__":

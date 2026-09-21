@@ -97,3 +97,18 @@ def test_pipeline_smoke_runs_without_jupyter_or_network(tmp_path, monkeypatch):
     silver_conn = db.open_silver(base_dir=str(silver_dir))
     row = silver_conn.execute("SELECT * FROM jobs WHERE job_id='aaa-111'").fetchone()
     assert row is not None
+
+
+def test_main_json_flag_prints_machine_readable_last_line(monkeypatch, capsys):
+    summary = {"title": "Staff Technical Writer", "company": "acme", "department": None,
+               "salary_min": 120000, "salary_max": 180000, "location": "Remote"}
+    monkeypatch.setattr(run_pipeline, "run_pipeline", lambda url, run_notebooks=False: summary)
+    monkeypatch.setattr("sys.argv", ["run_pipeline.py", "https://jobs.ashbyhq.com/Acme/aaa-111", "--json"])
+
+    run_pipeline.main()
+
+    last_line = capsys.readouterr().out.strip().splitlines()[-1]
+    assert json.loads(last_line) == {
+        "job": {"board": "ashby", "company": "acme", "job_id": "aaa-111"},
+        "summary": summary,
+    }

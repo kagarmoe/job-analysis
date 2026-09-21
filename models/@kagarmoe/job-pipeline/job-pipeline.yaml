@@ -1,0 +1,8 @@
+type: '@kagarmoe/job-pipeline'
+typeVersion: 2026.09.21.1
+id: bed185df-c404-4a47-baac-fc9a3f0db0f5
+name: job-pipeline
+version: 1
+tags: {}
+globalArguments: {}
+methods: {}
