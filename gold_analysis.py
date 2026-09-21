@@ -70,39 +70,6 @@ EDU_PATTERNS: Final[dict[str, str]] = {
     "JD / Law": r"\bJ\.?D\.?\b|\blaw degree\b|\bbar\b(?= admission| exam)",
 }
 
-BUILDER_PATTERNS: Final[tuple[str, ...]] = (
-    r"from scratch",
-    r"ground up",
-    r"greenfield",
-    r"first hire",
-    r"founding",
-    r"build out",
-    r"build\b.*from",
-)
-OWNER_PATTERNS: Final[tuple[str, ...]] = (
-    r"\bown\b",
-    r"define the strategy",
-    r"set the vision",
-    r"\broadmap\b",
-    r"lead the\b",
-    r"shape the",
-)
-LEADER_PATTERNS: Final[tuple[str, ...]] = (
-    r"hire and manage",
-    r"build a team",
-    r"cross-functional leadership",
-    r"manage a team",
-    r"grow the team",
-)
-CONTRIBUTOR_PATTERNS: Final[tuple[str, ...]] = (
-    r"contribute to",
-    r"\bassist\b",
-    r"join a team",
-    r"report to",
-    r"work under",
-    r"support the team",
-)
-
 _YOE_RE = re.compile(
     r"(\d{1,2})\s*(?:\+|or more)?\s*(?:[-\u2013]\s*(\d{1,2})\s*)?(?:\+)?\s*years?\b"
     r"(?:\s+of\s+(?:relevant\s+|professional\s+|industry\s+|hands[- ]on\s+)?"
@@ -437,61 +404,6 @@ def build_description_length_analysis(
         correlations=correlations,
         word_salary_trend=trend,
     )
-
-
-def score_scope(description: object) -> int:
-    """Score role ownership/scope from 0-10 using heuristic language cues."""
-    if not isinstance(description, str):
-        return 5
-
-    text = description.lower()
-    score = 5
-    for pattern in BUILDER_PATTERNS:
-        if re.search(pattern, text):
-            score += 2
-    for pattern in OWNER_PATTERNS:
-        if re.search(pattern, text):
-            score += 2
-    for pattern in LEADER_PATTERNS:
-        if re.search(pattern, text):
-            score += 1
-    for pattern in CONTRIBUTOR_PATTERNS:
-        if re.search(pattern, text):
-            score -= 1
-    return max(0, min(10, score))
-
-
-def select_role_gap_comparables(
-    df: pd.DataFrame,
-    *,
-    target_department: str,
-    target_scope: int,
-    target_job_id: str,
-    minimum_count: int = 5,
-) -> tuple[pd.DataFrame, int, str]:
-    """Select comparable salaried roles, relaxing filters when needed."""
-    job_id_series = df["job_id"].astype(str)
-
-    def _filter(scope_tolerance: int, same_department: bool) -> pd.DataFrame:
-        mask = (
-            (df["scope_score"] >= target_scope - scope_tolerance)
-            & (df["scope_score"] <= target_scope + scope_tolerance)
-            & (job_id_series != str(target_job_id))
-        )
-        if same_department:
-            mask &= df["department"] == target_department
-        return df.loc[mask].copy()
-
-    comparables = _filter(scope_tolerance=2, same_department=True)
-    if len(comparables) >= minimum_count:
-        return comparables, 2, "same_department_scope_2"
-
-    comparables = _filter(scope_tolerance=3, same_department=True)
-    if len(comparables) >= minimum_count:
-        return comparables, 3, "same_department_scope_3"
-
-    comparables = _filter(scope_tolerance=3, same_department=False)
-    return comparables, 3, "cross_department_scope_3"
 
 
 def latest_per_job(df: pd.DataFrame) -> pd.DataFrame:

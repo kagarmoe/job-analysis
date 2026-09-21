@@ -78,14 +78,10 @@ def test_nlp_notebook_uses_shared_gold_helpers():
     assert "description_length = build_description_length_analysis(df_nlp)" in source
 
 
-def test_role_gap_notebook_uses_shared_scope_and_yoe_helpers():
+def test_role_gap_notebook_uses_seniority_band_comparables_not_scope_score():
     source = _notebook_source("analyze_role_gap.ipynb")
-    assert (
-        "from gold_analysis import build_skill_overlap_matrix, extract_required_yoe, extract_skill_phrases, score_scope, select_role_gap_comparables"
-        in source
-    )
-    assert "def score_scope" not in source
-    assert "BUILDER_PATTERNS" not in source
+    assert "build_relative_position(df, JOB_ID)" in source
+    assert "scope" not in source.lower()
     assert "def extract_yoe" not in source
     assert "def extract_skill_phrases" not in source
 
@@ -115,7 +111,6 @@ def test_role_gap_notebook_handles_missing_salary_data():
     assert "if df.empty:" in source
     assert "No salaried roles available for comparable salary analysis." in source
     assert "No salary ranges available for salary comparison chart." in source
-    assert "No salary data available - skipping scope vs salary scatter." in source
 
 
 def test_role_gap_notebook_does_not_overwrite_usd_with_native_currency():
