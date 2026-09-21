@@ -181,18 +181,15 @@ def add_usd_salary(df):
     return df
 
 _YOE_RE = re.compile(
-    r"(\d+)\+?\s*(?:\u2013|-|to)\s*(\d+)\s+years?"   # "3-5 years" or "3\u20135 years"
-    r"|(\d+)\+\s*years?"                              # "5+ years"
-    r"|(\d+)\s+years?\s+of\s+experience",              # "5 years of experience"
+    r"(\d{1,2})\s*(?:\+|or more)?\s*(?:[-\u2013]\s*(\d{1,2})\s*)?(?:\+)?\s*years?\b"
+    r"(?:\s+of\s+(?:relevant\s+|professional\s+|industry\s+|hands[- ]on\s+)?"
+    r"(?:experience|work))?",
     re.I,
 )
 
-def extract_yoe(text: str) -> Optional[int]:
-    """Return minimum years of experience mentioned in text, or None."""
-    if not text:
+def extract_yoe(text) -> Optional[int]:
+    """Highest minimum years-of-experience requirement in text (1-25), or None."""
+    if not text or not isinstance(text, str):
         return None
-    m = _YOE_RE.search(text)
-    if not m:
-        return None
-    groups = [int(g) for g in m.groups() if g is not None]
-    return min(groups) if groups else None
+    minimums = [int(m[0]) for m in _YOE_RE.findall(text) if m[0] and 1 <= int(m[0]) <= 25]
+    return max(minimums) if minimums else None

@@ -119,6 +119,12 @@ def test_extract_yoe_none_input():
     assert extract_yoe(None) is None
 
 
+def test_extract_yoe_uses_highest_minimum_and_rejects_out_of_range():
+    text = "Requires 3-5 years of experience building APIs. Also 7+ years of professional work."
+    assert extract_yoe(text) == 7
+    assert extract_yoe("Requires 30+ years of experience.") is None
+
+
 def test_add_usd_salary_annualizes_sub_annual_pay_but_not_mislabeled_annual():
     import pandas as pd
     from classify import add_usd_salary

@@ -70,14 +70,6 @@ EDU_PATTERNS: Final[dict[str, str]] = {
     "JD / Law": r"\bJ\.?D\.?\b|\blaw degree\b|\bbar\b(?= admission| exam)",
 }
 
-_YOE_RE = re.compile(
-    r"(\d{1,2})\s*(?:\+|or more)?\s*(?:[-\u2013]\s*(\d{1,2})\s*)?(?:\+)?\s*years?\b"
-    r"(?:\s+of\s+(?:relevant\s+|professional\s+|industry\s+|hands[- ]on\s+)?"
-    r"(?:experience|work))?",
-    re.I,
-)
-
-
 @dataclass
 class TfidfClusterResult:
     """Container for TF-IDF projection and clustering outputs."""
@@ -112,26 +104,14 @@ def split_locations(location: object) -> list[str]:
     return parts or ["Unknown"]
 
 
-def extract_required_yoe(text: object) -> int | None:
-    """Return the highest minimum years-of-experience requirement found in text."""
-    if text is None or pd.isna(text):
-        return None
-    matches = _YOE_RE.findall(str(text))
-    if not matches:
-        return None
-    minimums = [int(match[0]) for match in matches if match[0] and 1 <= int(match[0]) <= 25]
-    return max(minimums) if minimums else None
-
-
 def build_skill_mention_counts(
     df: pd.DataFrame,
     *,
     skill_patterns: dict[str, str] = SKILL_KEYWORDS,
-    text_col: str = "description_md",
 ) -> pd.Series:
     """Count roles whose descriptions mention each skill pattern."""
     counts = {}
-    descriptions = df[text_col] if text_col in df.columns else pd.Series(dtype=object)
+    descriptions = df["description_md"] if "description_md" in df.columns else pd.Series(dtype=object)
     for skill, pattern in skill_patterns.items():
         count = int(descriptions.str.contains(pattern, flags=re.I, na=False).sum())
         if count > 0:
@@ -141,62 +121,47 @@ def build_skill_mention_counts(
     )
 
 
+def _department_mention_pct(
+    df: pd.DataFrame, patterns: dict[str, str], *, exclude_department: str
+) -> pd.DataFrame:
+    """Department x pattern: % of that department's descriptions mentioning each pattern."""
+    keep = df["department"] != exclude_department
+    hits = pd.DataFrame({
+        label: df["description_md"].str.contains(pattern, flags=re.I, na=False)
+        for label, pattern in patterns.items()
+    }, index=df.index)
+    order = df.loc[keep, "department"].value_counts().index
+    return (hits[keep].groupby(df.loc[keep, "department"]).mean() * 100).reindex(order).astype(float)
+
+
 def build_department_skill_matrix(
     df: pd.DataFrame,
     skills: list[str],
     *,
     skill_patterns: dict[str, str] = SKILL_KEYWORDS,
-    text_col: str = "description_md",
-    department_col: str = "department",
     exclude_department: str = "Other",
 ) -> pd.DataFrame:
     """Build department x skill percentages for descriptions mentioning each skill."""
-    if not skills or text_col not in df.columns or department_col not in df.columns:
+    if not skills or "description_md" not in df.columns or "department" not in df.columns:
         return pd.DataFrame()
 
-    df_with_desc = df.dropna(subset=[text_col])
-    if df_with_desc.empty:
+    if df["description_md"].dropna().empty:
         return pd.DataFrame()
-
-    departments = [
-        department
-        for department in df[department_col].value_counts().index
-        if department != exclude_department
-    ]
-    matrix = pd.DataFrame(index=departments, columns=skills, dtype=float)
-    for department in departments:
-        dept_descs = df.loc[df[department_col] == department, text_col]
-        n_dept = len(dept_descs)
-        for skill in skills:
-            pattern = skill_patterns[skill]
-            count = dept_descs.str.contains(pattern, flags=re.I, na=False).sum()
-            matrix.loc[department, skill] = count / n_dept * 100 if n_dept > 0 else 0
-    return matrix
-
-
-def build_yoe_dataset(df: pd.DataFrame, *, text_col: str = "description_md") -> pd.DataFrame:
-    """Return a copy of jobs with parsed years-of-experience requirements."""
-    yoe_df = df.copy()
-    descriptions = (
-        yoe_df[text_col]
-        if text_col in yoe_df.columns
-        else pd.Series(index=yoe_df.index, dtype=object)
+    return _department_mention_pct(
+        df, {skill: skill_patterns[skill] for skill in skills}, exclude_department=exclude_department
     )
-    yoe_df["yoe"] = descriptions.apply(extract_required_yoe)
-    return yoe_df
 
 
 def summarize_yoe_by_department(
     df_yoe: pd.DataFrame,
     *,
     min_count: int = 3,
-    department_col: str = "department",
 ) -> pd.DataFrame:
     """Summarize parseable YoE requirements by department."""
-    if df_yoe.empty or "yoe" not in df_yoe.columns or department_col not in df_yoe.columns:
+    if df_yoe.empty or "yoe" not in df_yoe.columns or "department" not in df_yoe.columns:
         return pd.DataFrame(columns=["median", "mean", "count"])
 
-    dept_yoe = df_yoe.groupby(department_col)["yoe"].agg(["median", "mean", "count"])
+    dept_yoe = df_yoe.groupby("department")["yoe"].agg(["median", "mean", "count"])
     return dept_yoe[dept_yoe["count"] >= min_count].sort_values("median", ascending=False)
 
 
@@ -204,12 +169,10 @@ def build_education_requirement_summary(
     df: pd.DataFrame,
     *,
     education_patterns: dict[str, str] = EDU_PATTERNS,
-    text_col: str = "description_md",
-    department_col: str = "department",
     exclude_department: str = "Other",
 ) -> tuple[pd.Series, pd.DataFrame]:
     """Build overall and department-level education requirement mention summaries."""
-    descriptions = df[text_col] if text_col in df.columns else pd.Series(dtype=object)
+    descriptions = df["description_md"] if "description_md" in df.columns else pd.Series(dtype=object)
     counts = {
         label: int(descriptions.str.contains(pattern, flags=re.I, na=False).sum())
         for label, pattern in education_patterns.items()
@@ -218,28 +181,18 @@ def build_education_requirement_summary(
         ascending=False, kind="stable"
     )
 
-    if department_col not in df.columns or text_col not in df.columns:
+    if "department" not in df.columns or "description_md" not in df.columns:
         return edu_series, pd.DataFrame(columns=edu_series.index)
 
-    departments = [
-        department
-        for department in df[department_col].value_counts().index
-        if department != exclude_department
-    ]
-    edu_dept = pd.DataFrame(index=departments, columns=edu_series.index, dtype=float)
-    for department in departments:
-        dept_descs = df.loc[df[department_col] == department, text_col]
-        for label in edu_series.index:
-            pattern = education_patterns[label]
-            count = dept_descs.str.contains(pattern, flags=re.I, na=False).sum()
-            edu_dept.loc[department, label] = count / len(dept_descs) * 100 if len(dept_descs) > 0 else 0
+    edu_dept = _department_mention_pct(
+        df, {label: education_patterns[label] for label in edu_series.index}, exclude_department=exclude_department
+    )
     return edu_series, edu_dept
 
 
 def build_tfidf_cluster_projection(
     df: pd.DataFrame,
     *,
-    text_col: str = "description_md",
     min_documents: int = 10,
     max_features: int = 3000,
     max_df: float = 0.85,
@@ -247,10 +200,10 @@ def build_tfidf_cluster_projection(
     random_state: int = 42,
 ) -> TfidfClusterResult:
     """Build TF-IDF features, 2D SVD coordinates, and KMeans cluster labels."""
-    if text_col not in df.columns:
+    if "description_md" not in df.columns:
         df_cluster = df.iloc[0:0].copy()
     else:
-        df_cluster = df.dropna(subset=[text_col]).copy()
+        df_cluster = df.dropna(subset=["description_md"]).copy()
 
     if len(df_cluster) < min_documents:
         return TfidfClusterResult(
@@ -273,12 +226,12 @@ def build_tfidf_cluster_projection(
 
     initial_error = None
     try:
-        tfidf_matrix = tfidf.fit_transform(df_cluster[text_col])
+        tfidf_matrix = tfidf.fit_transform(df_cluster["description_md"])
     except ValueError as e:
         initial_error = str(e)
         tfidf.set_params(min_df=1, max_df=1.0)
         try:
-            tfidf_matrix = tfidf.fit_transform(df_cluster[text_col])
+            tfidf_matrix = tfidf.fit_transform(df_cluster["description_md"])
         except ValueError as e2:
             retry_error = str(e2)
             return TfidfClusterResult(
@@ -314,8 +267,6 @@ def build_cluster_profiles(
     *,
     top_terms: int = 8,
     top_departments: int = 3,
-    department_col: str = "department",
-    salary_col: str = "mid_usd",
 ) -> pd.DataFrame:
     """Summarize each TF-IDF cluster with terms, department mix, and median salary."""
     columns = ["cluster", "role_count", "top_terms", "top_departments", "median_salary"]
@@ -328,16 +279,16 @@ def build_cluster_profiles(
     for cluster in range(result.km.n_clusters):
         cluster_rows = result.df_cluster[result.df_cluster["cluster"] == cluster]
         top_term_values = [feature_names[i] for i in order[cluster, :top_terms]]
-        if department_col in cluster_rows.columns:
-            top_dept = cluster_rows[department_col].value_counts().head(top_departments)
+        if "department" in cluster_rows.columns:
+            top_dept = cluster_rows["department"].value_counts().head(top_departments)
             department_summary = ", ".join(
                 f"{department} ({count})" for department, count in top_dept.items()
             )
         else:
             department_summary = ""
         median_salary = (
-            cluster_rows[salary_col].median()
-            if salary_col in cluster_rows.columns
+            cluster_rows["mid_usd"].median()
+            if "mid_usd" in cluster_rows.columns
             else pd.NA
         )
         rows.append(
@@ -355,35 +306,32 @@ def build_cluster_profiles(
 def build_description_length_analysis(
     df: pd.DataFrame,
     *,
-    text_col: str = "description_md",
-    department_col: str = "department",
-    salary_col: str = "mid_usd",
     top_departments: int = 10,
     min_salary_rows: int = 3,
 ) -> DescriptionLengthAnalysis:
     """Derive description length metrics and salary relationship summaries."""
     desc_df = df.copy()
     descriptions = (
-        desc_df[text_col]
-        if text_col in desc_df.columns
+        desc_df["description_md"]
+        if "description_md" in desc_df.columns
         else pd.Series(index=desc_df.index, dtype=object)
     )
     desc_df["desc_len"] = descriptions.str.len()
     desc_df["desc_words"] = descriptions.str.split().str.len()
     desc_df["n_bullets"] = descriptions.str.count(r"^\s*[\*\-]\s", flags=re.MULTILINE)
 
-    subset_cols = [salary_col, "desc_words"]
+    subset_cols = ["mid_usd", "desc_words"]
     df_len_sal = (
         desc_df.dropna(subset=subset_cols).copy()
         if all(column in desc_df.columns for column in subset_cols)
         else desc_df.iloc[0:0].copy()
     )
 
-    if department_col in desc_df.columns:
+    if "department" in desc_df.columns:
         department_median_words = (
-            desc_df.groupby(department_col)["desc_words"].median().sort_values(ascending=True)
+            desc_df.groupby("department")["desc_words"].median().sort_values(ascending=True)
         )
-        top_department_index = desc_df[department_col].value_counts().head(top_departments).index
+        top_department_index = desc_df["department"].value_counts().head(top_departments).index
         department_median_words = department_median_words[
             department_median_words.index.isin(top_department_index)
         ]
@@ -393,8 +341,8 @@ def build_description_length_analysis(
     correlations = None
     trend = None
     if len(df_len_sal) >= min_salary_rows:
-        correlations = df_len_sal[["desc_words", "n_bullets", salary_col]].corr()
-        slope, intercept = np.polyfit(df_len_sal["desc_words"], df_len_sal[salary_col], 1)
+        correlations = df_len_sal[["desc_words", "n_bullets", "mid_usd"]].corr()
+        slope, intercept = np.polyfit(df_len_sal["desc_words"], df_len_sal["mid_usd"], 1)
         trend = (float(slope), float(intercept))
 
     return DescriptionLengthAnalysis(
