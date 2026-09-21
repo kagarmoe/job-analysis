@@ -1,6 +1,6 @@
 # Job Analysis
 
-Analyze job postings from any company to evaluate salary fairness relative to role scope. Scrapes current and historical job data from Greenhouse and Ashby job boards, then processes it through local SQLite layers.
+Analyze job postings from any company to evaluate salary fairness relative to peer roles. Scrapes current and historical job data from Greenhouse and Ashby job boards, then processes it through local SQLite layers.
 
 ## Quick Start
 
@@ -151,18 +151,14 @@ Copper  →  Bronze  →  Silver  →  Gold
 | `analyze_salaries.ipynb` | Salary distributions by department, seniority, location |
 | `analyze_nlp.ipynb` | Skills extraction, word clouds, job description clustering (requires scikit-learn) |
 | `analyze_historical.ipynb` | Hiring volume trends and salary changes over time |
-| `analyze_role_gap.ipynb` | Compare a target job's salary vs. scope-matched comparables |
+| `analyze_role_gap.ipynb` | Compare a target job's salary vs. same-seniority peers at its company |
+| `analyze_cross_company.ipynb` | Place every role matching a title regex against its own company's same-seniority peers, across companies |
 
 ## Role Gap Analysis
 
-Compares a target job against comparable roles using **scope scoring** rather than title bands. Each role gets a 0–10 score based on description language:
+Compares a target job against salaried roles in the **same seniority band at the same company**: median, IQR, percentile and gap %. Pools under 5 roles are flagged as thin rather than widened.
 
-- **Builder signals** (+2): "from scratch", "ground up", "greenfield", "first hire"
-- **Owner signals** (+2): "own", "define the strategy", "set the vision", "roadmap"
-- **Leader signals** (+1): "hire and manage", "build a team", "cross-functional leadership"
-- **Contributor signals** (−1): "contribute to", "assist", "join a team", "report to"
-
-Comparables are matched on normalized department + similar scope score (±1).
+An earlier description-based "scope score" was validated on 562 Anthropic salaried roles and found uncorrelated with pay (Spearman rho = −0.10; two greedy regexes matched 69% and 35% of all postings), so it was removed.
 
 ## Key Files
 
