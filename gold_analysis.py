@@ -505,6 +505,35 @@ def latest_per_job(df: pd.DataFrame) -> pd.DataFrame:
     return df.iloc[order].drop_duplicates(subset="job_id", keep="last").reset_index(drop=True)
 
 
+def build_relative_position(df: pd.DataFrame, job_id: str, *, min_n: int = 5) -> dict[str, Any]:
+    """Place one salaried role against same-seniority peers at the same company.
+
+    `df` is one company's salaried, latest-snapshot frame with `mid_usd`. Peers are the
+    same seniority band only: the scope score has no correlation with pay (rho=-0.10 on
+    562 Anthropic roles) and department matching leaves n<3 for technical writers.
+    Pools under `min_n` are returned but flagged `thin` rather than widened.
+    """
+    job_id_series = df["job_id"].astype(str)
+    target = df.loc[job_id_series == str(job_id)].iloc[0]
+    peers = df.loc[(df["seniority"] == target["seniority"]) & (job_id_series != str(job_id)), "mid_usd"].dropna()
+    n = len(peers)
+    median = float(peers.median()) if n else float("nan")
+    q1, q3 = (float(peers.quantile(0.25)), float(peers.quantile(0.75))) if n else (float("nan"),) * 2
+    return {
+        "title": target["title"],
+        "location": target["location"],
+        "seniority": target["seniority"],
+        "target_mid": float(target["mid_usd"]),
+        "n": n,
+        "comp_median": median,
+        "q1": q1,
+        "q3": q3,
+        "gap_pct": (target["mid_usd"] - median) / median * 100 if n else float("nan"),
+        "percentile": float((peers < target["mid_usd"]).mean() * 100) if n else float("nan"),
+        "thin": n < min_n,
+    }
+
+
 def coverage_label(df_all: pd.DataFrame, df_salary: pd.DataFrame) -> str:
     """Chart-title suffix so no salary statistic is read without its n and disclosure rate.
 

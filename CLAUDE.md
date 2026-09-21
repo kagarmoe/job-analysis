@@ -70,6 +70,7 @@ This scrapes the company's jobs, runs wayback historical (first time only), proc
 - `analyze_salaries.ipynb` — Current salary analysis. Config: `COMPANY`, `BOARD`.
 - `analyze_nlp.ipynb` — NLP & text analysis on job descriptions (requires sklearn + wordcloud). Config: `COMPANY`, `BOARD`.
 - `analyze_historical.ipynb` — Historical hiring trends. Config: `COMPANY`, `BOARD`.
+- `analyze_cross_company.ipynb` — Relative position of target roles vs same-seniority peers at their own company, compared across companies. Config: `TARGETS` list of `(company, board, job_id)`.
 - `analyze_role_gap.ipynb` — Role gap analysis: compare any job's salary vs. scope-matched comparables. Config: `COMPANY`, `BOARD`, `JOB_ID`.
 
 ## Current Status (2026-06-09)
