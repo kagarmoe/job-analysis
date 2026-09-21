@@ -505,6 +505,60 @@ def latest_per_job(df: pd.DataFrame) -> pd.DataFrame:
     return df.iloc[order].drop_duplicates(subset="job_id", keep="last").reset_index(drop=True)
 
 
+def build_relative_position(df: pd.DataFrame, job_id: str, *, min_n: int = 5) -> dict[str, Any]:
+    """Place one salaried role against same-seniority peers at the same company.
+
+    `df` is one company's salaried, latest-snapshot frame with `mid_usd`. Peers are the
+    same seniority band only: the scope score has no correlation with pay (rho=-0.10 on
+    562 Anthropic roles) and department matching leaves n<3 for technical writers.
+    Pools under `min_n` are returned but flagged `thin` rather than widened.
+    """
+    job_id_series = df["job_id"].astype(str)
+    target = df.loc[job_id_series == str(job_id)].iloc[0]
+    peers = df.loc[(df["seniority"] == target["seniority"]) & (job_id_series != str(job_id)), "mid_usd"].dropna()
+    n = len(peers)
+    median = float(peers.median()) if n else float("nan")
+    q1, q3 = (float(peers.quantile(0.25)), float(peers.quantile(0.75))) if n else (float("nan"),) * 2
+    return {
+        "title": target["title"],
+        "location": target["location"],
+        "seniority": target["seniority"],
+        "target_mid": float(target["mid_usd"]),
+        "n": n,
+        "comp_median": median,
+        "q1": q1,
+        "q3": q3,
+        "gap_pct": (target["mid_usd"] - median) / median * 100 if n else float("nan"),
+        "percentile": float((peers < target["mid_usd"]).mean() * 100) if n else float("nan"),
+        "thin": n < min_n,
+    }
+
+
+def coverage_label(df_all: pd.DataFrame, df_salary: pd.DataFrame) -> str:
+    """Chart-title suffix so no salary statistic is read without its n and disclosure rate.
+
+    Disclosure follows pay-transparency law by location, so a "median salary" is really the
+    median of the roles posted where disclosure is required.
+    """
+    total, salaried = len(df_all), len(df_salary)
+    pct = f" ({salaried / total:.0%})" if total else ""
+    return f"n={salaried} of {total} jobs{pct} disclose salary"
+
+
+def data_quality(df: pd.DataFrame) -> str:
+    """One-line header for a notebook's loaded frame; stops charts being read at n=7 unnoticed."""
+    n = len(df)
+    salaried = int(df[["salary_min", "salary_max"]].notna().all(axis=1).sum()) if n else 0
+    described = int(df["description_md"].notna().sum()) if n else 0
+    pct = lambda k: f" ({k / n:.0%})" if n else ""  # noqa: E731
+    dates = df["source_date"].astype(str).str[:8]
+    span = f"{dates.min()[:4]}-{dates.min()[4:6]}-{dates.min()[6:]} to {dates.max()[:4]}-{dates.max()[4:6]}-{dates.max()[6:]}" if n else "none"
+    return (
+        f"DATA QUALITY: {n} jobs | salary disclosed: {salaried}{pct(salaried)} | "
+        f"descriptions: {described}{pct(described)} | snapshots {span}"
+    )
+
+
 def build_historical_dataset(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Build one row per job with first/last seen timestamps and active status."""
     hist = df.copy()
