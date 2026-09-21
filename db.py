@@ -27,7 +27,9 @@ from bs4 import BeautifulSoup
 DASH_PATTERN = r"(?:–|—|-|\s+to\s+|\s+and\s+)"
 CURRENCY_SYM_1 = r"(?P<sym1>\$|£|€)"
 CURRENCY_SYM_2 = r"(?P<sym2>\$|£|€)"
-NUMBER = r"(?:\d{1,3}(?:,\d{3})+|\d+)"
+# "." is the thousands separator in European postings ("€235.000"); exactly three digits
+# must follow, so decimals like "$45.50" are not swallowed.
+NUMBER = r"(?:\d{1,3}(?:[.,]\d{3})+|\d+)"
 UNIT_SUFFIX = r"(?:/\w+)?"  # optional e.g. /hr, /yr
 
 SALARY_RANGE_RE = re.compile(
@@ -131,6 +133,10 @@ def extract_salary_block_from_html(content_html: str) -> Optional[str]:
     return None
 
 
+def _to_int(number: str) -> int:
+    return int(re.sub(r"[.,]", "", number))
+
+
 def parse_salary_text(block: str) -> SalaryParseResult:
     if not block:
         return SalaryParseResult("", None, None, None, None)
@@ -157,8 +163,8 @@ def parse_salary_text(block: str) -> SalaryParseResult:
     m = SALARY_RANGE_RE.search(block)
     if m:
         sym = m.group("sym1")
-        min_val = int(m.group("min").replace(",", ""))
-        max_val = int(m.group("max").replace(",", ""))
+        min_val = _to_int(m.group("min"))
+        max_val = _to_int(m.group("max"))
         if not currency:
             currency = {"$": "USD", "€": "EUR", "£": "GBP"}.get(sym)
         if min_val > max_val:
@@ -166,11 +172,11 @@ def parse_salary_text(block: str) -> SalaryParseResult:
         return SalaryParseResult(block, currency, min_val, max_val, unit)
 
     # secondary pattern: "131,040–165,000 USD"
-    m2 = re.search(rf"(\d{{1,3}}(?:,\d{{3}})+|\d+)\s*{DASH_PATTERN}\s*(\d{{1,3}}(?:,\d{{3}})+|\d+)\s*(USD|EUR|GBP|CAD|AUD)?",
+    m2 = re.search(rf"({NUMBER})\s*{DASH_PATTERN}\s*({NUMBER})\s*(USD|EUR|GBP|CAD|AUD)?",
                    block)
     if m2:
-        min_val = int(m2.group(1).replace(",", ""))
-        max_val = int(m2.group(2).replace(",", ""))
+        min_val = _to_int(m2.group(1))
+        max_val = _to_int(m2.group(2))
         if not currency and m2.group(3):
             currency = m2.group(3)
         if min_val > max_val:
@@ -178,9 +184,9 @@ def parse_salary_text(block: str) -> SalaryParseResult:
         return SalaryParseResult(block, currency, min_val, max_val, unit)
 
     # single amount fallback: "$1,415/per week"
-    m3 = re.search(r"(?P<sym>\$|£|€)\s*(?P<val>\d{1,3}(?:,\d{3})+|\d+)", block)
+    m3 = re.search(rf"(?P<sym>\$|£|€)\s*(?P<val>{NUMBER})", block)
     if m3:
-        val = int(m3.group("val").replace(",", ""))
+        val = _to_int(m3.group("val"))
         if not currency:
             currency = {"$": "USD", "€": "EUR", "£": "GBP"}.get(m3.group("sym"))
         return SalaryParseResult(block, currency, val, val, unit)

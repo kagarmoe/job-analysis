@@ -115,3 +115,14 @@ def test_role_gap_notebook_handles_missing_salary_data():
     assert "No salaried roles available for comparable salary analysis." in source
     assert "No salary ranges available for salary comparison chart." in source
     assert "No salary data available - skipping scope vs salary scatter." in source
+
+
+def test_role_gap_notebook_does_not_overwrite_usd_with_native_currency():
+    source = _notebook_source("analyze_role_gap.ipynb")
+    assert 'df["mid_usd"] = (df["salary_min"]' not in source
+    assert 'left=row["salary_min"]' not in source
+
+
+def test_snapshot_level_notebooks_dedupe_to_latest_per_job():
+    for path in ["analyze_salaries.ipynb", "analyze_nlp.ipynb", "analyze_role_gap.ipynb"]:
+        assert "latest_per_job(" in _notebook_source(path), path

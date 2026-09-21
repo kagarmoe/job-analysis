@@ -154,10 +154,27 @@ def add_classifications(df):
     return df
 
 
+# unit -> (annual multiplier, largest plausible amount for that unit). The cap matters: the
+# parser tags "$133,000 - $182,000 USD per monthly" (pay frequency) as monthly, and
+# multiplying that by 12 would be worse than the bug this fixes.
+# ponytail: hourly assumes full-time (2,080 h/yr). If contractor/intern pay should not share a
+# distribution with salaried roles, filter those rows out before analysis instead.
+_ANNUALIZE = {"hourly": (2080, 1_000), "weekly": (52, 10_000), "monthly": (12, 40_000)}
+MIN_PLAUSIBLE_ANNUAL_USD = 10_000  # below this the "salary" is a parse artifact, not pay
+
+
+def _annual_multiplier(unit, salary_max):
+    multiplier, cap = _ANNUALIZE.get(unit, (1, 0))
+    return multiplier if salary_max < cap else 1
+
+
 def add_usd_salary(df):
+    units = df["salary_unit"] if "salary_unit" in df else [None] * len(df)
+    annual = [_annual_multiplier(u, mx) for u, mx in zip(units, df["salary_max"])]
     df["rate"] = df["currency"].map(TO_USD)
-    df["min_usd"] = df["salary_min"] * df["rate"]
-    df["max_usd"] = df["salary_max"] * df["rate"]
+    df["min_usd"] = df["salary_min"] * df["rate"] * annual
+    df["max_usd"] = df["salary_max"] * df["rate"] * annual
+    df.loc[df["max_usd"] < MIN_PLAUSIBLE_ANNUAL_USD, ["min_usd", "max_usd"]] = float("nan")
     df["mid_usd"] = (df["min_usd"] + df["max_usd"]) / 2
     return df
 

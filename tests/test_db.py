@@ -131,3 +131,9 @@ def test_upsert_job_updates_on_conflict(tmp_path):
     })
     row = conn.execute("SELECT title FROM jobs WHERE job_id='j3'").fetchone()
     assert row["title"] == "Senior Engineer"
+
+
+def test_parse_salary_european_thousands_separator():
+    # Anthropic's EU postings; previously parsed as 235
+    result = db.parse_salary_text("Annual Salary: €235.000 — €295.000 EUR")
+    assert (result.salary_min, result.salary_max, result.currency) == (235000, 295000, "EUR")
