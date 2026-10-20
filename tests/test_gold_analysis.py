@@ -1,6 +1,6 @@
 import pandas as pd
 
-from gold_analysis import (
+from job_analysis.gold_analysis import (
     build_active_role_timeseries,
     build_active_closed_comparison,
     build_department_quarterly_salary_trends,
@@ -15,11 +15,7 @@ from gold_analysis import (
     build_skill_mention_counts,
     build_tfidf_cluster_projection,
     build_time_to_fill_dataset,
-    build_yoe_dataset,
-    extract_required_yoe,
     extract_skill_phrases,
-    score_scope,
-    select_role_gap_comparables,
     split_locations,
     summarize_yoe_by_department,
     summarize_recurring_roles,
@@ -34,18 +30,6 @@ def test_split_locations_handles_multi_value_and_missing_inputs():
     ]
     assert split_locations(None) == ["Unknown"]
     assert split_locations("") == ["Unknown"]
-
-
-def test_extract_required_yoe_uses_highest_minimum_requirement():
-    text = """
-    Requires 3-5 years of experience building APIs.
-    You should also have 7+ years of professional software engineering work.
-    """
-    assert extract_required_yoe(text) == 7
-
-
-def test_extract_required_yoe_rejects_out_of_range_values():
-    assert extract_required_yoe("Requires 30+ years of experience.") is None
 
 
 def test_build_skill_mention_counts_counts_matching_descriptions_once_per_role():
@@ -71,6 +55,18 @@ def test_build_skill_mention_counts_counts_matching_descriptions_once_per_role()
     assert counts.to_dict() == {"Java": 1, "Python": 1, "SQL": 1}
 
 
+def test_skill_patterns_go_is_the_language_and_rest_matches_restful():
+    from job_analysis.gold_analysis import SKILL_KEYWORDS
+
+    jobs = pd.DataFrame({"description_md": [
+        "We go fast and ship RESTful APIs",      # verb 'go', RESTful
+        "Services in Go and Rust; REST endpoints",
+        "Golang backend",
+    ]})
+    counts = build_skill_mention_counts(jobs, skill_patterns={"Go": SKILL_KEYWORDS["Go"], "REST": SKILL_KEYWORDS["REST"]})
+    assert counts.to_dict() == {"Go": 2, "REST": 2}
+
+
 def test_build_department_skill_matrix_returns_department_percentages():
     jobs = pd.DataFrame(
         [
@@ -94,29 +90,6 @@ def test_build_department_skill_matrix_returns_department_percentages():
     assert matrix.loc["Engineering", "SQL"] == 50
     assert matrix.loc["Product", "Python"] == 0
     assert matrix.loc["Product", "SQL"] == 50
-
-
-def test_build_yoe_dataset_and_department_summary():
-    jobs = pd.DataFrame(
-        [
-            {"description_md": "Requires 3+ years of experience", "department": "Engineering"},
-            {"description_md": "Requires 5+ years of experience", "department": "Engineering"},
-            {"description_md": "Requires 7+ years of experience", "department": "Engineering"},
-            {"description_md": "Requires 2+ years of experience", "department": "Product"},
-            {"description_md": "No explicit requirement", "department": "Product"},
-        ]
-    )
-
-    with_yoe = build_yoe_dataset(jobs)
-    yoe_jobs = with_yoe.dropna(subset=["yoe"])
-    summary = summarize_yoe_by_department(yoe_jobs, min_count=2)
-
-    assert list(with_yoe["yoe"])[:4] == [3, 5, 7, 2]
-    assert pd.isna(with_yoe.loc[4, "yoe"])
-    assert list(summary.index) == ["Engineering"]
-    assert summary.loc["Engineering", "median"] == 5
-    assert summary.loc["Engineering", "mean"] == 5
-    assert summary.loc["Engineering", "count"] == 3
 
 
 def test_build_education_requirement_summary_counts_overall_and_by_department():
@@ -285,49 +258,6 @@ def test_build_description_length_analysis_handles_insufficient_salary_data():
     assert not analysis.department_median_words.empty
 
 
-def test_score_scope_rewards_builder_and_owner_language():
-    assert score_scope("Build from scratch, own the roadmap, and grow the team.") > 5
-    assert score_scope("Join a team and support the team on existing systems.") < 5
-    assert score_scope(None) == 5
-
-
-def test_select_role_gap_comparables_prefers_same_department_then_relaxes():
-    df = pd.DataFrame(
-        [
-            {"job_id": "target", "department": "Engineering", "scope_score": 7, "mid_usd": 200000},
-            {"job_id": "eng-1", "department": "Engineering", "scope_score": 6, "mid_usd": 180000},
-            {"job_id": "eng-2", "department": "Engineering", "scope_score": 8, "mid_usd": 190000},
-            {"job_id": "eng-3", "department": "Engineering", "scope_score": 4, "mid_usd": 175000},
-            {"job_id": "prod-1", "department": "Product", "scope_score": 6, "mid_usd": 170000},
-            {"job_id": "prod-2", "department": "Product", "scope_score": 7, "mid_usd": 172000},
-        ]
-    )
-
-    comparables, tolerance, strategy = select_role_gap_comparables(
-        df,
-        target_department="Engineering",
-        target_scope=7,
-        target_job_id="target",
-        minimum_count=3,
-    )
-
-    assert set(comparables["job_id"]) == {"eng-1", "eng-2", "eng-3"}
-    assert tolerance == 3
-    assert strategy == "same_department_scope_3"
-
-    comparables, tolerance, strategy = select_role_gap_comparables(
-        df,
-        target_department="Engineering",
-        target_scope=7,
-        target_job_id="target",
-        minimum_count=5,
-    )
-
-    assert set(comparables["job_id"]) == {"eng-1", "eng-2", "eng-3", "prod-1", "prod-2"}
-    assert tolerance == 3
-    assert strategy == "cross_department_scope_3"
-
-
 def test_build_historical_dataset_derives_first_last_and_active_flags():
     df = pd.DataFrame(
         [
@@ -357,7 +287,7 @@ def test_build_quarterly_salary_stats_returns_empty_contract_without_salary_data
     salary_with_quarter, qtr_stats = build_quarterly_salary_stats(hist_salary)
 
     assert salary_with_quarter.empty
-    assert list(qtr_stats.columns) == ["median", "mean", "count", "std"]
+    assert list(qtr_stats.columns) == ["median", "mean", "count", "q1", "q3"]
     assert qtr_stats.empty
 
 
@@ -385,6 +315,7 @@ def test_build_quarterly_salary_stats_derives_timestamp_index_and_numeric_stats(
     ]
     assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "median"] == 120000
     assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "mean"] == 120000
+    assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "q1"] <= qtr_stats.loc[pd.Timestamp("2026-01-01"), "q3"]
     assert qtr_stats.loc[pd.Timestamp("2026-01-01"), "count"] == 2
     assert qtr_stats["median"].dtype.kind in {"f", "i"}
 
@@ -583,7 +514,7 @@ def test_build_skill_overlap_matrix_scores_roles_on_target_phrases():
 
 
 def test_latest_per_job_keeps_newest_snapshot_per_job():
-    from gold_analysis import latest_per_job
+    from job_analysis.gold_analysis import latest_per_job
 
     # silver is keyed on (company, board, job_id, source_date): one row per snapshot
     df = pd.DataFrame({
@@ -613,7 +544,7 @@ def test_build_historical_dataset_keeps_latest_snapshot_row():
 
 
 def test_coverage_label_reports_n_and_disclosure_rate():
-    from gold_analysis import coverage_label
+    from job_analysis.gold_analysis import coverage_label
 
     df_all = pd.DataFrame({"job_id": ["a", "b", "c", "d"]})
     df_salary = df_all.iloc[:1]
@@ -622,7 +553,7 @@ def test_coverage_label_reports_n_and_disclosure_rate():
 
 
 def test_build_relative_position_uses_same_seniority_peers_and_flags_thin_pools():
-    from gold_analysis import build_relative_position
+    from job_analysis.gold_analysis import build_relative_position
 
     df = pd.DataFrame({
         "job_id": ["tw", "a", "b", "c", "d", "e", "x"],
@@ -644,7 +575,7 @@ def test_build_relative_position_uses_same_seniority_peers_and_flags_thin_pools(
 
 
 def test_data_quality_summarises_coverage_and_snapshot_range():
-    from gold_analysis import data_quality
+    from job_analysis.gold_analysis import data_quality
 
     df = pd.DataFrame({
         "job_id": ["a", "b"],

@@ -6,7 +6,12 @@ __pycache__/
 .wayback_progress*.json
 .pipeline_*.ipynb
 *.csv
-db/
+*.log
+*.egg-info/
+# Layer DBs (copper/bronze/silver); only the hand-labeled seed set is tracked.
+data/*
+!data/seed_labels.json
+graphify-out/
 classify.txt
 vaults/
 # BEGIN swamp managed section - DO NOT EDIT

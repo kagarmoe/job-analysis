@@ -1,8 +1,8 @@
 import json
 
-import bronze
-import db
-import silver
+from job_analysis import bronze
+from job_analysis import db
+from job_analysis import silver
 
 
 def _store_ashby_board(copper_dir, company, source_date, jobs):

@@ -1,5 +1,5 @@
 """Tests for department normalization and YOE extraction."""
-from classify import normalize_department
+from job_analysis.classify import normalize_department
 
 
 def test_anthropic_engineering():
@@ -92,7 +92,7 @@ def test_other_passthrough():
     assert normalize_department("Other") == "Other"
 
 
-from classify import extract_yoe
+from job_analysis.classify import extract_yoe
 
 
 def test_extract_yoe_plus_pattern():
@@ -119,9 +119,15 @@ def test_extract_yoe_none_input():
     assert extract_yoe(None) is None
 
 
+def test_extract_yoe_uses_highest_minimum_and_rejects_out_of_range():
+    text = "Requires 3-5 years of experience building APIs. Also 7+ years of professional work."
+    assert extract_yoe(text) == 7
+    assert extract_yoe("Requires 30+ years of experience.") is None
+
+
 def test_add_usd_salary_annualizes_sub_annual_pay_but_not_mislabeled_annual():
     import pandas as pd
-    from classify import add_usd_salary
+    from job_analysis.classify import add_usd_salary
 
     df = pd.DataFrame({
         "salary_min": [20, 133000, 100000, 1000, 50000],

@@ -84,7 +84,7 @@ export const model = {
           ) => Promise<{ name: string }>;
         },
       ): Promise<{ dataHandles: { name: string }[] }> => {
-        const cmdArgs = ["run_pipeline.py", args.url, "--json"];
+        const cmdArgs = ["-m", "job_analysis.run_pipeline", args.url, "--json"];
         if (args.runNotebooks) cmdArgs.push("--run-notebooks");
 
         context.logger.info(`Running pipeline for ${args.url}`);
