@@ -1,11 +1,11 @@
 """Tests for run_pipeline URL parsing."""
 import json
 
-import db
-import bronze
-import silver
-from run_pipeline import parse_job_url
-import run_pipeline
+from job_analysis import db
+from job_analysis import bronze
+from job_analysis import silver
+from job_analysis.run_pipeline import parse_job_url
+from job_analysis import run_pipeline
 
 
 def test_ashby_url():

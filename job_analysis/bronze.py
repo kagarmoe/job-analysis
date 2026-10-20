@@ -8,7 +8,7 @@ import json
 import re
 import sqlite3
 
-import db
+from job_analysis import db
 
 _ASHBY_JOB_URL_RE = re.compile(
     r"jobs\.ashbyhq\.com/([^/]+)"
@@ -198,8 +198,8 @@ def derive(
     company: str,
     job_id: str | None = None,
     *,
-    copper_base_dir: str = "copper",
-    bronze_base_dir: str = "bronze",
+    copper_base_dir: str = db.COPPER_DIR,
+    bronze_base_dir: str = db.BRONZE_DIR,
 ) -> int:
     """Derive bronze records for one board/company from copper snapshots."""
     copper_conn = db.open_copper(board, base_dir=copper_base_dir)

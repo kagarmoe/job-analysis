@@ -1,7 +1,7 @@
 import json
 
-import db
-import silver
+from job_analysis import db
+from job_analysis import silver
 
 
 def test_process_ashby_api_board_to_silver(tmp_path):
