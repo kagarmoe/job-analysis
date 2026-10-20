@@ -1,0 +1,9 @@
+type: '@kagarmoe/graphify'
+typeVersion: 2026.10.20.1
+id: 62023286-c193-4392-9b86-1ae9d19a18dc
+name: graphify
+version: 1
+tags: {}
+globalArguments:
+  apiKey: '${{ vault.get(default, GEMINI_API_KEY) }}'
+methods: {}
