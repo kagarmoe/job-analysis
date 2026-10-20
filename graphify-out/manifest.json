@@ -1,0 +1,372 @@
+{
+  "bronze.py": {
+    "mtime": 1780980298.3722248,
+    "ast_hash": "187d475aceace97de1e4932443f4d5ab",
+    "semantic_hash": ""
+  },
+  "classify.py": {
+    "mtime": 1790034507.4451983,
+    "ast_hash": "cfb5f3350df35a3975d6017d9c484795",
+    "semantic_hash": ""
+  },
+  "db.py": {
+    "mtime": 1790034507.4456,
+    "ast_hash": "a80e08b952339d03f28a123ab9bc4d8a",
+    "semantic_hash": ""
+  },
+  "extensions/models/job_pipeline.ts": {
+    "mtime": 1790034507.4461057,
+    "ast_hash": "5de066fc19df2d3a2608b87e07ae7f2e",
+    "semantic_hash": ""
+  },
+  "extensions/models/upstream_extensions.json": {
+    "mtime": 1792519229.0355716,
+    "ast_hash": "1209c2810a2fd8a44c3887e93ee71555",
+    "semantic_hash": ""
+  },
+  "gold_analysis.py": {
+    "mtime": 1790034507.4465978,
+    "ast_hash": "1dada9a1b127fd65eab8a1af7ff254bb",
+    "semantic_hash": ""
+  },
+  "run_pipeline.py": {
+    "mtime": 1790034507.4479604,
+    "ast_hash": "9a6c6a3cf5b56bee25d786a39e5e92d1",
+    "semantic_hash": ""
+  },
+  "scrape_ashby.py": {
+    "mtime": 1780980079.5802832,
+    "ast_hash": "df970dd2007300c303c148706f02cd6e",
+    "semantic_hash": ""
+  },
+  "scrape_greenhouse.py": {
+    "mtime": 1780980079.759314,
+    "ast_hash": "ced3cfb7e8baaa22e6740598a7531faa",
+    "semantic_hash": ""
+  },
+  "scrape_wayback.py": {
+    "mtime": 1779163766.0724657,
+    "ast_hash": "369d5c5437cc302530ae27817706cc25",
+    "semantic_hash": ""
+  },
+  "seed_labels.json": {
+    "mtime": 1779151872.5428493,
+    "ast_hash": "b9e38dc61f18477cfd639a73c4442a34",
+    "semantic_hash": ""
+  },
+  "silver.py": {
+    "mtime": 1780981348.5423024,
+    "ast_hash": "4d1af673d99a86d34f7625bfac06693c",
+    "semantic_hash": ""
+  },
+  "tests/test_bronze.py": {
+    "mtime": 1780979803.1898563,
+    "ast_hash": "55d8af7fb6e3b80e1affc0c95695c11a",
+    "semantic_hash": ""
+  },
+  "tests/test_classify.py": {
+    "mtime": 1790034507.448265,
+    "ast_hash": "d13508f2e690620692a45e41365f8bf1",
+    "semantic_hash": ""
+  },
+  "tests/test_db.py": {
+    "mtime": 1790034507.4485786,
+    "ast_hash": "12f0baf6cdc1ab604755b3913718ff0f",
+    "semantic_hash": ""
+  },
+  "tests/test_gold_analysis.py": {
+    "mtime": 1790034507.4490926,
+    "ast_hash": "1b37489439bd5eb7b3a90e503c679d38",
+    "semantic_hash": ""
+  },
+  "tests/test_gold_contract.py": {
+    "mtime": 1780981329.0664644,
+    "ast_hash": "81beefd0cb99e71fe17250a619107936",
+    "semantic_hash": ""
+  },
+  "tests/test_gold_notebooks.py": {
+    "mtime": 1790034507.4496398,
+    "ast_hash": "0651f810ecbfd71a25aa6c85088ebe32",
+    "semantic_hash": ""
+  },
+  "tests/test_pipeline.py": {
+    "mtime": 1790034507.450165,
+    "ast_hash": "da304139edda0ac9093052f04d5a0bb3",
+    "semantic_hash": ""
+  },
+  "tests/test_silver.py": {
+    "mtime": 1780979868.0395358,
+    "ast_hash": "c2b3aa38831dbb0e1f645b4d8f06a8b8",
+    "semantic_hash": ""
+  },
+  ".swamp.yaml": {
+    "mtime": 1792518984.369408,
+    "ast_hash": "d16be9d8feb8a4ce62c3e0da51944358",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1790627970.300668,
+    "ast_hash": "98cdf2b8e6cce35e5e1e75b3d7781baf",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1792518984.366137,
+    "ast_hash": "6800cd71bf920c7d6e8ad6da0b215778",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1790034507.441605,
+    "ast_hash": "b39fcf6668d7a6e0100398a913ae765f",
+    "semantic_hash": ""
+  },
+  "docs/database.md": {
+    "mtime": 1779163766.070288,
+    "ast_hash": "1aa8cf4ca63c5c60170a027a8ed233b5",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-03-25-flexible-role-gap-design.md": {
+    "mtime": 1780979364.752039,
+    "ast_hash": "5bda216bcc100b579ad597b9729aee08",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-03-25-multi-company-scraping-design.md": {
+    "mtime": 1780979364.4575875,
+    "ast_hash": "8111e82c647b2f50375f1f4e307c0c6e",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-03-25-multi-company-scraping-plan.md": {
+    "mtime": 1780979443.458269,
+    "ast_hash": "172b5228cc28a8387ff22fd1dae51e75",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-03-25-pipeline-design.md": {
+    "mtime": 1780979364.161501,
+    "ast_hash": "388b81f49dd439ccf04146d09f4a4ac9",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-03-25-pipeline-plan.md": {
+    "mtime": 1780979443.3096297,
+    "ast_hash": "4b29aaafeaeb346a0f06e2a94bf4aa4d",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-05-18-medallion-architecture-design.md": {
+    "mtime": 1780979307.4600341,
+    "ast_hash": "ae9471f997023bbe2e1f2a66a8189722",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-05-18-medallion-architecture-implementation.md": {
+    "mtime": 1780979443.6091905,
+    "ast_hash": "5180acb9ed029902740636f628f531c4",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-05-18-medallion-layer-as-notebook-implementation.md": {
+    "mtime": 1780979443.759666,
+    "ast_hash": "0129522b9f97494ce267e46fda3764fc",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-06-09-gold-data-contract-plan.md": {
+    "mtime": 1780981106.6278186,
+    "ast_hash": "92303120e71192350434268fbfa630ac",
+    "semantic_hash": ""
+  },
+  "docs/plans/2026-06-09-medallion-python-first-recovery-plan.md": {
+    "mtime": 1780981106.7768984,
+    "ast_hash": "64bd8dd506be4442f8d7a9e674f7d35b",
+    "semantic_hash": ""
+  },
+  "models/@kagarmoe/job-pipeline/job-pipeline.yaml": {
+    "mtime": 1790034507.4470074,
+    "ast_hash": "48af750d1c155b47b0ef7a433d25e7e8",
+    "semantic_hash": ""
+  },
+  "requirements.txt": {
+    "mtime": 1790034507.4476204,
+    "ast_hash": "78c8d480ae4b33e1d9711fcb92c44e82",
+    "semantic_hash": ""
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/bronze.py": {
+    "mtime": 1780980298.3722248,
+    "ast_hash": "187d475aceace97de1e4932443f4d5ab",
+    "semantic_hash": "187d475aceace97de1e4932443f4d5ab"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/classify.py": {
+    "mtime": 1790034507.4451983,
+    "ast_hash": "cfb5f3350df35a3975d6017d9c484795",
+    "semantic_hash": "cfb5f3350df35a3975d6017d9c484795"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/db.py": {
+    "mtime": 1790034507.4456,
+    "ast_hash": "a80e08b952339d03f28a123ab9bc4d8a",
+    "semantic_hash": "a80e08b952339d03f28a123ab9bc4d8a"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/extensions/models/job_pipeline.ts": {
+    "mtime": 1790034507.4461057,
+    "ast_hash": "5de066fc19df2d3a2608b87e07ae7f2e",
+    "semantic_hash": "5de066fc19df2d3a2608b87e07ae7f2e"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/extensions/models/upstream_extensions.json": {
+    "mtime": 1792519229.0355716,
+    "ast_hash": "1209c2810a2fd8a44c3887e93ee71555",
+    "semantic_hash": "1209c2810a2fd8a44c3887e93ee71555"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/gold_analysis.py": {
+    "mtime": 1790034507.4465978,
+    "ast_hash": "1dada9a1b127fd65eab8a1af7ff254bb",
+    "semantic_hash": "1dada9a1b127fd65eab8a1af7ff254bb"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/run_pipeline.py": {
+    "mtime": 1790034507.4479604,
+    "ast_hash": "9a6c6a3cf5b56bee25d786a39e5e92d1",
+    "semantic_hash": "9a6c6a3cf5b56bee25d786a39e5e92d1"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/scrape_ashby.py": {
+    "mtime": 1780980079.5802832,
+    "ast_hash": "df970dd2007300c303c148706f02cd6e",
+    "semantic_hash": "df970dd2007300c303c148706f02cd6e"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/scrape_greenhouse.py": {
+    "mtime": 1780980079.759314,
+    "ast_hash": "ced3cfb7e8baaa22e6740598a7531faa",
+    "semantic_hash": "ced3cfb7e8baaa22e6740598a7531faa"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/scrape_wayback.py": {
+    "mtime": 1779163766.0724657,
+    "ast_hash": "369d5c5437cc302530ae27817706cc25",
+    "semantic_hash": "369d5c5437cc302530ae27817706cc25"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/seed_labels.json": {
+    "mtime": 1779151872.5428493,
+    "ast_hash": "b9e38dc61f18477cfd639a73c4442a34",
+    "semantic_hash": "b9e38dc61f18477cfd639a73c4442a34"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/silver.py": {
+    "mtime": 1780981348.5423024,
+    "ast_hash": "4d1af673d99a86d34f7625bfac06693c",
+    "semantic_hash": "4d1af673d99a86d34f7625bfac06693c"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/tests/test_bronze.py": {
+    "mtime": 1780979803.1898563,
+    "ast_hash": "55d8af7fb6e3b80e1affc0c95695c11a",
+    "semantic_hash": "55d8af7fb6e3b80e1affc0c95695c11a"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/tests/test_classify.py": {
+    "mtime": 1790034507.448265,
+    "ast_hash": "d13508f2e690620692a45e41365f8bf1",
+    "semantic_hash": "d13508f2e690620692a45e41365f8bf1"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/tests/test_db.py": {
+    "mtime": 1790034507.4485786,
+    "ast_hash": "12f0baf6cdc1ab604755b3913718ff0f",
+    "semantic_hash": "12f0baf6cdc1ab604755b3913718ff0f"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/tests/test_gold_analysis.py": {
+    "mtime": 1790034507.4490926,
+    "ast_hash": "1b37489439bd5eb7b3a90e503c679d38",
+    "semantic_hash": "1b37489439bd5eb7b3a90e503c679d38"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/tests/test_gold_contract.py": {
+    "mtime": 1780981329.0664644,
+    "ast_hash": "81beefd0cb99e71fe17250a619107936",
+    "semantic_hash": "81beefd0cb99e71fe17250a619107936"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/tests/test_gold_notebooks.py": {
+    "mtime": 1790034507.4496398,
+    "ast_hash": "0651f810ecbfd71a25aa6c85088ebe32",
+    "semantic_hash": "0651f810ecbfd71a25aa6c85088ebe32"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/tests/test_pipeline.py": {
+    "mtime": 1790034507.450165,
+    "ast_hash": "da304139edda0ac9093052f04d5a0bb3",
+    "semantic_hash": "da304139edda0ac9093052f04d5a0bb3"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/tests/test_silver.py": {
+    "mtime": 1780979868.0395358,
+    "ast_hash": "c2b3aa38831dbb0e1f645b4d8f06a8b8",
+    "semantic_hash": "c2b3aa38831dbb0e1f645b4d8f06a8b8"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/.swamp.yaml": {
+    "mtime": 1792518984.369408,
+    "ast_hash": "d16be9d8feb8a4ce62c3e0da51944358",
+    "semantic_hash": "d16be9d8feb8a4ce62c3e0da51944358"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/AGENTS.md": {
+    "mtime": 1790627970.300668,
+    "ast_hash": "98cdf2b8e6cce35e5e1e75b3d7781baf",
+    "semantic_hash": "98cdf2b8e6cce35e5e1e75b3d7781baf"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/CLAUDE.md": {
+    "mtime": 1792518984.366137,
+    "ast_hash": "6800cd71bf920c7d6e8ad6da0b215778",
+    "semantic_hash": "6800cd71bf920c7d6e8ad6da0b215778"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/README.md": {
+    "mtime": 1790034507.441605,
+    "ast_hash": "b39fcf6668d7a6e0100398a913ae765f",
+    "semantic_hash": "b39fcf6668d7a6e0100398a913ae765f"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/database.md": {
+    "mtime": 1779163766.070288,
+    "ast_hash": "1aa8cf4ca63c5c60170a027a8ed233b5",
+    "semantic_hash": "1aa8cf4ca63c5c60170a027a8ed233b5"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-03-25-flexible-role-gap-design.md": {
+    "mtime": 1780979364.752039,
+    "ast_hash": "5bda216bcc100b579ad597b9729aee08",
+    "semantic_hash": "5bda216bcc100b579ad597b9729aee08"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-03-25-multi-company-scraping-design.md": {
+    "mtime": 1780979364.4575875,
+    "ast_hash": "8111e82c647b2f50375f1f4e307c0c6e",
+    "semantic_hash": "8111e82c647b2f50375f1f4e307c0c6e"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-03-25-multi-company-scraping-plan.md": {
+    "mtime": 1780979443.458269,
+    "ast_hash": "172b5228cc28a8387ff22fd1dae51e75",
+    "semantic_hash": "172b5228cc28a8387ff22fd1dae51e75"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-03-25-pipeline-design.md": {
+    "mtime": 1780979364.161501,
+    "ast_hash": "388b81f49dd439ccf04146d09f4a4ac9",
+    "semantic_hash": "388b81f49dd439ccf04146d09f4a4ac9"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-03-25-pipeline-plan.md": {
+    "mtime": 1780979443.3096297,
+    "ast_hash": "4b29aaafeaeb346a0f06e2a94bf4aa4d",
+    "semantic_hash": "4b29aaafeaeb346a0f06e2a94bf4aa4d"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-05-18-medallion-architecture-design.md": {
+    "mtime": 1780979307.4600341,
+    "ast_hash": "ae9471f997023bbe2e1f2a66a8189722",
+    "semantic_hash": "ae9471f997023bbe2e1f2a66a8189722"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-05-18-medallion-architecture-implementation.md": {
+    "mtime": 1780979443.6091905,
+    "ast_hash": "5180acb9ed029902740636f628f531c4",
+    "semantic_hash": "5180acb9ed029902740636f628f531c4"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-05-18-medallion-layer-as-notebook-implementation.md": {
+    "mtime": 1780979443.759666,
+    "ast_hash": "0129522b9f97494ce267e46fda3764fc",
+    "semantic_hash": "0129522b9f97494ce267e46fda3764fc"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-06-09-gold-data-contract-plan.md": {
+    "mtime": 1780981106.6278186,
+    "ast_hash": "92303120e71192350434268fbfa630ac",
+    "semantic_hash": "92303120e71192350434268fbfa630ac"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/docs/plans/2026-06-09-medallion-python-first-recovery-plan.md": {
+    "mtime": 1780981106.7768984,
+    "ast_hash": "64bd8dd506be4442f8d7a9e674f7d35b",
+    "semantic_hash": "64bd8dd506be4442f8d7a9e674f7d35b"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/models/@kagarmoe/job-pipeline/job-pipeline.yaml": {
+    "mtime": 1790034507.4470074,
+    "ast_hash": "48af750d1c155b47b0ef7a433d25e7e8",
+    "semantic_hash": "48af750d1c155b47b0ef7a433d25e7e8"
+  },
+  "/Users/kimberlygarmoe/repos/job-analysis/requirements.txt": {
+    "mtime": 1790034507.4476204,
+    "ast_hash": "78c8d480ae4b33e1d9711fcb92c44e82",
+    "semantic_hash": "78c8d480ae4b33e1d9711fcb92c44e82"
+  }
+}
