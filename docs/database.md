@@ -10,20 +10,20 @@ The pipeline writes to three SQLite layers. All are local files; no server requi
 import sqlite3
 
 # Quick read-only connection
-conn = sqlite3.connect("silver/jobs.db")
+conn = sqlite3.connect("data/silver/jobs.db")
 conn.row_factory = sqlite3.Row   # rows behave like dicts
 
 # Via db.py (preferred — handles schema migrations)
 import db
-conn = db.open_silver()          # silver/jobs.db
-conn = db.open_copper("ashby")   # copper/ashby.db
-conn = db.open_bronze("ashby")   # bronze/ashby.db
+conn = db.open_silver()          # data/silver/jobs.db
+conn = db.open_copper("ashby")   # data/copper/ashby.db
+conn = db.open_bronze("ashby")   # data/bronze/ashby.db
 ```
 
 From a notebook:
 ```python
 import sqlite3, pandas as pd
-conn = sqlite3.connect("silver/jobs.db")
+conn = sqlite3.connect("data/silver/jobs.db")
 df = pd.read_sql("SELECT * FROM jobs WHERE company = 'crusoe'", conn)
 ```
 
@@ -32,9 +32,9 @@ df = pd.read_sql("SELECT * FROM jobs WHERE company = 'crusoe'", conn)
 ## Layers
 
 ```
-copper/{board}.db   — raw HTTP responses, immutable
-bronze/{board}.db   — structured per-job records, re-derivable from copper
-silver/jobs.db      — classified, normalized, analysis-ready
+data/copper/{board}.db   — raw HTTP responses, immutable
+data/bronze/{board}.db   — structured per-job records, re-derivable from copper
+data/silver/jobs.db      — classified, normalized, analysis-ready
 ```
 
 `board` is one of: `ashby`, `greenhouse`, `adhoc`.
@@ -43,7 +43,7 @@ silver/jobs.db      — classified, normalized, analysis-ready
 
 ## Schema
 
-### Copper — `copper/{board}.db`
+### Copper — `data/copper/{board}.db`
 
 One row per HTTP fetch. Never modified after insert.
 
@@ -60,7 +60,7 @@ Unique constraint: `(url, source_date)` — re-scraping the same URL on the same
 
 ---
 
-### Bronze — `bronze/{board}.db`
+### Bronze — `data/bronze/{board}.db`
 
 One row per job per snapshot date per page type. Re-derived from copper without network access.
 
@@ -87,7 +87,7 @@ Unique constraint: `(company, job_id, source_date, page_type)`.
 
 ---
 
-### Silver — `silver/jobs.db`
+### Silver — `data/silver/jobs.db`
 
 The query layer. Three tables.
 
