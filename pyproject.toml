@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Pinned dependencies live in requirements.txt; this file only makes the
+# package importable (`pip install -e .`) from notebooks and other cwd's.
+[project]
+name = "job-analysis"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["job_analysis"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -19,6 +19,12 @@ from typing import Optional
 
 from bs4 import BeautifulSoup
 
+# Layer DBs live under <repo>/data/, regardless of the caller's working directory.
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+COPPER_DIR = str(DATA_DIR / "copper")
+BRONZE_DIR = str(DATA_DIR / "bronze")
+SILVER_DIR = str(DATA_DIR / "silver")
+
 # ===========================================================================
 # 1. Salary parsing
 # ===========================================================================
@@ -28,8 +34,9 @@ DASH_PATTERN = r"(?:–|—|-|\s+to\s+|\s+and\s+)"
 CURRENCY_SYM_1 = r"(?P<sym1>\$|£|€)"
 CURRENCY_SYM_2 = r"(?P<sym2>\$|£|€)"
 # "." is the thousands separator in European postings ("€235.000"); exactly three digits
-# must follow, so decimals like "$45.50" are not swallowed.
-NUMBER = r"(?:\d{1,3}(?:[.,]\d{3})+|\d+)"
+# must follow, so decimals like "$45.50" are not swallowed. A trailing K ("$180K") is
+# thousands; _to_int expands it.
+NUMBER = r"(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[kK]\b)?"
 UNIT_SUFFIX = r"(?:/\w+)?"  # optional e.g. /hr, /yr
 
 SALARY_RANGE_RE = re.compile(
@@ -134,7 +141,8 @@ def extract_salary_block_from_html(content_html: str) -> Optional[str]:
 
 
 def _to_int(number: str) -> int:
-    return int(re.sub(r"[.,]", "", number))
+    scale = 1000 if number[-1] in "kK" else 1
+    return int(re.sub(r"[.,kK]", "", number)) * scale
 
 
 def parse_salary_text(block: str) -> SalaryParseResult:
@@ -265,6 +273,23 @@ def parse_json_ld_job_posting(html_content: str) -> Optional[dict]:
     return result if (result.get("title") or result.get("salary_min")) else None
 
 
+def parse_ashby_app_data(html_content: Optional[str]) -> Optional[dict]:
+    """Return the `posting` from an Ashby page's window.__appData.
+
+    {} for a shell page (posting is null, e.g. an archived board index); None when the
+    page has no parsable __appData.
+    """
+    i = (html_content or "").find("window.__appData")
+    start = html_content.find("{", i) if i >= 0 else -1
+    if start < 0:
+        return None
+    try:
+        data, _ = _json.JSONDecoder().raw_decode(html_content[start:])
+    except ValueError:
+        return None
+    return (data.get("posting") or {}) if isinstance(data, dict) else None
+
+
 # ===========================================================================
 # 2. Copper layer
 # ===========================================================================
@@ -283,7 +308,7 @@ CREATE INDEX IF NOT EXISTS idx_url ON snapshots(url);
 """
 
 
-def open_copper(board: str, base_dir: str = "copper") -> sqlite3.Connection:
+def open_copper(board: str, base_dir: str = COPPER_DIR) -> sqlite3.Connection:
     """Open (or create) the copper DB for a given board."""
     Path(base_dir).mkdir(parents=True, exist_ok=True)
     path = str(Path(base_dir) / f"{board}.db")
@@ -337,7 +362,7 @@ CREATE INDEX IF NOT EXISTS idx_company_job ON snapshots(company, job_id);
 """
 
 
-def open_bronze(board: str, base_dir: str = "bronze") -> sqlite3.Connection:
+def open_bronze(board: str, base_dir: str = BRONZE_DIR) -> sqlite3.Connection:
     """Open (or create) the bronze DB for a given board.
 
     board must be one of: ashby, greenhouse, adhoc.
@@ -426,7 +451,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 _REQUIRED = {"company", "board", "job_id", "source_date"}
 
 
-def open_silver(base_dir: str = "silver") -> sqlite3.Connection:
+def open_silver(base_dir: str = SILVER_DIR) -> sqlite3.Connection:
     """Open (or create) the silver jobs DB."""
     Path(base_dir).mkdir(parents=True, exist_ok=True)
     path = str(Path(base_dir) / "jobs.db")

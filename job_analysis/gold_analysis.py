@@ -6,7 +6,7 @@ from typing import Any, Final
 
 import numpy as np
 import pandas as pd
-from classify import add_usd_salary
+from job_analysis.classify import add_usd_salary
 from sklearn.cluster import KMeans
 from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer

@@ -5,19 +5,19 @@ Analyze job postings from any company to evaluate salary fairness relative to ro
 ## Quick Start
 
 ```bash
-python run_pipeline.py <job_posting_url>
+python -m job_analysis.run_pipeline <job_posting_url>
 ```
 
 Example:
 
 ```bash
-python run_pipeline.py https://jobs.ashbyhq.com/Anthropic/abc123
-python run_pipeline.py https://job-boards.greenhouse.io/anthropic/jobs/456789
+python -m job_analysis.run_pipeline https://jobs.ashbyhq.com/Anthropic/abc123
+python -m job_analysis.run_pipeline https://job-boards.greenhouse.io/anthropic/jobs/456789
 ```
 
 This single command:
 
-1. **Scrapes current jobs** for the company (writes to `copper/`)
+1. **Scrapes current jobs** for the company (writes to `data/copper/`)
 2. **Scrapes historical jobs** from the Wayback Machine (first run only)
 3. **Runs ETL** through bronze → silver layers
 4. **Prints a salary/location summary**
@@ -36,6 +36,7 @@ needs Python 3.11+.
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install requests beautifulsoup4 html2text pandas matplotlib seaborn scikit-learn wordcloud
+pip install -e .   # makes `job_analysis` importable from notebooks/
 ```
 
 If you want to run notebooks via `--run-notebooks`, also install a Jupyter kernel:
@@ -57,26 +58,26 @@ Many companies embed Ashby or Greenhouse on their own domain (`careers.company.c
 
 ### Scrapers
 
-Scrapers write raw HTTP responses to `copper/` only — no transformation, no CSV output.
+Scrapers write raw HTTP responses to `data/copper/` only — no transformation, no CSV output.
 
 ```bash
 # Scrape all current open jobs for a company
-python scrape_ashby.py --company <company>
-python scrape_greenhouse.py --company <company>
+python -m job_analysis.scrape_ashby --company <company>
+python -m job_analysis.scrape_greenhouse --company <company>
 
 # Examples
-python scrape_ashby.py --company pinecone
-python scrape_greenhouse.py --company anthropic
+python -m job_analysis.scrape_ashby --company pinecone
+python -m job_analysis.scrape_greenhouse --company anthropic
 ```
 
 ```bash
 # Scrape historical snapshots from the Wayback Machine
 # Run once per company; slow (2.5s delay between requests)
-python scrape_wayback.py --board <board> --company <company>
+python -m job_analysis.scrape_wayback --board <board> --company <company>
 
 # Examples
-python scrape_wayback.py --board ashby --company pinecone
-python scrape_wayback.py --board greenhouse --company anthropic
+python -m job_analysis.scrape_wayback --board ashby --company pinecone
+python -m job_analysis.scrape_wayback --board greenhouse --company anthropic
 ```
 
 ### ETL Layers
@@ -85,12 +86,12 @@ Run a layer directly (useful when re-processing after a schema or classifier cha
 
 ```bash
 # Bronze: parse copper → structured per-job records
-python bronze.py --board ashby --company pinecone
-python bronze.py --board greenhouse --company anthropic
+python -m job_analysis.bronze --board ashby --company pinecone
+python -m job_analysis.bronze --board greenhouse --company anthropic
 
 # Silver: classify bronze records → silver/jobs.db
-python silver.py --board ashby --company pinecone
-python silver.py --board greenhouse --company anthropic
+python -m job_analysis.silver --board ashby --company pinecone
+python -m job_analysis.silver --board greenhouse --company anthropic
 ```
 
 To re-derive bronze from existing copper without re-scraping:
@@ -106,10 +107,10 @@ print(f"Derived {count} bronze records")
 Run a gold notebook directly in Jupyter, or via nbconvert:
 
 ```bash
-jupyter notebook analyze_salaries.ipynb
-jupyter notebook analyze_nlp.ipynb
-jupyter notebook analyze_historical.ipynb
-jupyter notebook analyze_role_gap.ipynb
+jupyter notebook notebooks/analyze_salaries.ipynb
+jupyter notebook notebooks/analyze_nlp.ipynb
+jupyter notebook notebooks/analyze_historical.ipynb
+jupyter notebook notebooks/analyze_role_gap.ipynb
 ```
 
 Each notebook has a config cell at the top with `COMPANY`, `BOARD` (and `JOB_ID` for role gap). Set these before running.
@@ -120,13 +121,13 @@ Query silver directly for quick lookups:
 
 ```bash
 # Open a SQLite shell on the silver DB
-sqlite3 silver/jobs.db
+sqlite3 data/silver/jobs.db
 
 # Quick job count per company
-sqlite3 silver/jobs.db "SELECT company, COUNT(*) FROM jobs GROUP BY company"
+sqlite3 data/silver/jobs.db "SELECT company, COUNT(*) FROM jobs GROUP BY company"
 
 # Jobs with salary data
-sqlite3 silver/jobs.db \
+sqlite3 data/silver/jobs.db \
   "SELECT title, salary_min, salary_max, currency FROM jobs WHERE has_salary=1 ORDER BY salary_max DESC LIMIT 20"
 ```
 
@@ -139,19 +140,19 @@ Copper  →  Bronze  →  Silver  →  Gold
 (fetch)   (schema)   (classify)  (analyze)
 ```
 
-- **Copper** (`copper/ashby.db`, `copper/greenhouse.db`) — immutable raw HTTP responses. The only layer that touches the network. Re-scraping the same URL on the same date is a no-op.
-- **Bronze** (`bronze/ashby.db`, `bronze/greenhouse.db`) — schema applied. Per-job records extracted from copper. Re-derivable without re-scraping.
-- **Silver** (`silver/jobs.db`) — classified and validated. Department, seniority, work mode, salary, and YOE fields populated. Failed records written to `silver_rejected` with reason.
-- **Gold** — analysis notebooks that read from `silver/jobs.db` via `pd.read_sql`.
+- **Copper** (`data/copper/ashby.db`, `data/copper/greenhouse.db`) — immutable raw HTTP responses. The only layer that touches the network. Re-scraping the same URL on the same date is a no-op.
+- **Bronze** (`data/bronze/ashby.db`, `data/bronze/greenhouse.db`) — schema applied. Per-job records extracted from copper. Re-derivable without re-scraping.
+- **Silver** (`data/silver/jobs.db`) — classified and validated. Department, seniority, work mode, salary, and YOE fields populated. Failed records written to `silver_rejected` with reason.
+- **Gold** — analysis notebooks that read from `data/silver/jobs.db` via `pd.read_sql`.
 
 ## Analysis Notebooks
 
 | Notebook | What It Does |
 |---|---|
-| `analyze_salaries.ipynb` | Salary distributions by department, seniority, location |
-| `analyze_nlp.ipynb` | Skills extraction, word clouds, job description clustering (requires scikit-learn) |
-| `analyze_historical.ipynb` | Hiring volume trends and salary changes over time |
-| `analyze_role_gap.ipynb` | Compare a target job's salary vs. scope-matched comparables |
+| `notebooks/analyze_salaries.ipynb` | Salary distributions by department, seniority, location |
+| `notebooks/analyze_nlp.ipynb` | Skills extraction, word clouds, job description clustering (requires scikit-learn) |
+| `notebooks/analyze_historical.ipynb` | Hiring volume trends and salary changes over time |
+| `notebooks/analyze_role_gap.ipynb` | Compare a target job's salary vs. scope-matched comparables |
 
 ## Role Gap Analysis
 
@@ -166,14 +167,14 @@ Comparables are matched on normalized department + similar scope score (±1).
 
 ## Key Files
 
-- `run_pipeline.py` — Single-command orchestrator. Parses job URL, scrapes, runs bronze and silver ETL, then prints a summary. Optional `--run-notebooks` executes gold notebooks.
-- `db.py` — Storage utilities: schemas, open/store/upsert/log helpers, plus salary parsing helpers used by bronze/silver.
-- `classify.py` — Source of truth for classification functions (department, seniority, work mode, YOE extraction, USD conversion).
-- `bronze.py` — Copper → bronze ETL. Derives structured board-specific records from raw copper snapshots.
-- `silver.py` — Bronze → silver ETL. Merges page types, classifies jobs, validates rows, writes rejects, and logs runs.
-- `scrape_ashby.py` — Live Ashby scraper. Writes to `copper/ashby.db`.
-- `scrape_greenhouse.py` — Live Greenhouse scraper. Writes to `copper/greenhouse.db`.
-- `scrape_wayback.py` — Wayback Machine historical scraper. Writes to `copper/{board}.db`.
+- `job_analysis/run_pipeline.py` — Single-command orchestrator. Parses job URL, scrapes, runs bronze and silver ETL, then prints a summary. Optional `--run-notebooks` executes gold notebooks.
+- `job_analysis/db.py` — Storage utilities: schemas, open/store/upsert/log helpers, plus salary parsing helpers used by bronze/silver.
+- `job_analysis/classify.py` — Source of truth for classification functions (department, seniority, work mode, YOE extraction, USD conversion).
+- `job_analysis/bronze.py` — Copper → bronze ETL. Derives structured board-specific records from raw copper snapshots.
+- `job_analysis/silver.py` — Bronze → silver ETL. Merges page types, classifies jobs, validates rows, writes rejects, and logs runs.
+- `job_analysis/scrape_ashby.py` — Live Ashby scraper. Writes to `data/copper/ashby.db`.
+- `job_analysis/scrape_greenhouse.py` — Live Greenhouse scraper. Writes to `data/copper/greenhouse.db`.
+- `job_analysis/scrape_wayback.py` — Wayback Machine historical scraper. Writes to `data/copper/{board}.db`.
 - `tests/` — pytest suite, including a no-network app smoke test for the core pipeline.
 
 ## Department Taxonomy

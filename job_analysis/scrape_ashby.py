@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
 Scrape jobs from an Ashby job board and store to copper layer.
-Usage: python scrape_ashby.py --company pinecone
+Usage: python -m job_analysis.scrape_ashby --company pinecone
 """
 from __future__ import annotations
 import argparse
 import logging
 from datetime import date
-import db
+from job_analysis import db
 import requests
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
 
 
-def scrape_all_jobs(company: str, *, copper_base_dir: str = "copper") -> tuple[list[dict], str]:
-    url = f"https://api.ashbyhq.com/posting-api/job-board/{company}"
+def scrape_all_jobs(company: str, *, copper_base_dir: str = db.COPPER_DIR) -> tuple[list[dict], str]:
+    url = f"https://api.ashbyhq.com/posting-api/job-board/{company}?includeCompensation=true"
     log.info("Fetching all jobs from Ashby API for %s ...", company)
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()

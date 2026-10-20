@@ -1,7 +1,7 @@
 import json
 
-import db
-import bronze
+from job_analysis import db
+from job_analysis import bronze
 
 
 def test_derive_ashby_board_api_from_copper(tmp_path):
@@ -110,3 +110,22 @@ def test_derive_adhoc_requires_job_id(tmp_path):
     ).fetchone()
     assert row is not None
     assert row["page_type"] == "job_page"
+
+
+def test_derive_ashby_takes_newest_same_day_board_snapshot(tmp_path):
+    copper_dir, bronze_dir = tmp_path / "copper", tmp_path / "bronze"
+    copper_conn = db.open_copper("ashby", base_dir=str(copper_dir))
+    base = "https://api.ashbyhq.com/posting-api/job-board/acme"
+    for url, job in [
+        (base, {"id": "aaa-111", "title": "Engineer"}),
+        (base + "?includeCompensation=true", {"id": "aaa-111", "title": "Engineer", "compensation": {"x": 1}}),
+    ]:
+        db.store_copper(copper_conn, url=url, http_status=200,
+                        content=json.dumps({"jobs": [job]}), source_date="20260101")
+
+    bronze.derive("ashby", "acme", copper_base_dir=str(copper_dir), bronze_base_dir=str(bronze_dir))
+
+    bronze_conn = db.open_bronze("ashby", base_dir=str(bronze_dir))
+    (content,) = bronze_conn.execute(
+        "SELECT content FROM snapshots WHERE job_id='aaa-111' AND page_type='api_board'").fetchone()
+    assert json.loads(content)["compensation"] == {"x": 1}

@@ -3,7 +3,7 @@
 Scrape jobs from any Greenhouse job board and store to copper layer.
 
 Usage:
-  python scrape_greenhouse.py --company anthropic
+  python -m job_analysis.scrape_greenhouse --company anthropic
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import argparse
 import logging
 from datetime import date
 
-import db
+from job_analysis import db
 import requests
 
 logging.basicConfig(
@@ -23,7 +23,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def scrape_all_jobs(company: str, *, copper_base_dir: str = "copper") -> tuple[list[dict], str]:
+def scrape_all_jobs(company: str, *, copper_base_dir: str = db.COPPER_DIR) -> tuple[list[dict], str]:
     """Returns (jobs, source_date). source_date = today as YYYYMMDD."""
     url = f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs"
     log.info("Fetching all jobs from Greenhouse API for %s ...", company)

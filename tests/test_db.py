@@ -1,6 +1,7 @@
+import json
 import sqlite3
 import pytest
-import db
+from job_analysis import db
 
 
 def test_open_copper_creates_schema(tmp_path):
@@ -137,3 +138,18 @@ def test_parse_salary_european_thousands_separator():
     # Anthropic's EU postings; previously parsed as 235
     result = db.parse_salary_text("Annual Salary: €235.000 — €295.000 EUR")
     assert (result.salary_min, result.salary_max, result.currency) == (235000, 295000, "EUR")
+
+
+def test_parse_salary_text_expands_k_suffix():
+    # Ashby's compensation summary; previously parsed as 180–250
+    result = db.parse_salary_text("$180K – $250K • Offers Equity")
+    assert (result.salary_min, result.salary_max, result.currency) == (180000, 250000, "USD")
+
+
+def test_parse_ashby_app_data_tells_posting_shell_and_other_pages_apart():
+    posting = {"title": "Documentation Engineer", "departmentName": "Engineering"}
+    page = '<script>window.__appData = {"posting": %s, "x": 1};</script>' % json.dumps(posting)
+    shell = '<title>Jobs</title><script>window.__appData = {"posting": null};</script>'
+    assert db.parse_ashby_app_data(page) == posting
+    assert db.parse_ashby_app_data(shell) == {}
+    assert db.parse_ashby_app_data("<html><title>Engineer</title></html>") is None
