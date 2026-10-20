@@ -16,7 +16,7 @@ _ASHBY_JOB_URL_RE = re.compile(
     r"(/application)?$",
 )
 _ASHBY_API_BOARD_RE = re.compile(
-    r"api\.ashbyhq\.com/posting-api/job-board/([^/]+)$"
+    r"api\.ashbyhq\.com/posting-api/job-board/([^/?]+)(?:\?.*)?$"
 )
 _ASHBY_INDIVIDUAL_JOB_RE = re.compile(
     r"api\.ashbyhq\.com/posting-api/job-board/[^/]+/job/"
@@ -33,7 +33,8 @@ def derive_ashby(
     """Derive per-job bronze records from copper for an Ashby company."""
     rows = copper_conn.execute(
         "SELECT id, url, content, source_date FROM snapshots "
-        "WHERE url LIKE ? OR url LIKE ? OR url LIKE ?",
+        # Newest first: bronze is INSERT OR IGNORE, so the latest same-day fetch wins.
+        "WHERE url LIKE ? OR url LIKE ? OR url LIKE ? ORDER BY id DESC",
         (
             f"%jobs.ashbyhq.com/{company}/%",
             f"%api.ashbyhq.com/posting-api/job-board/{company}%",

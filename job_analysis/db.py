@@ -34,8 +34,9 @@ DASH_PATTERN = r"(?:–|—|-|\s+to\s+|\s+and\s+)"
 CURRENCY_SYM_1 = r"(?P<sym1>\$|£|€)"
 CURRENCY_SYM_2 = r"(?P<sym2>\$|£|€)"
 # "." is the thousands separator in European postings ("€235.000"); exactly three digits
-# must follow, so decimals like "$45.50" are not swallowed.
-NUMBER = r"(?:\d{1,3}(?:[.,]\d{3})+|\d+)"
+# must follow, so decimals like "$45.50" are not swallowed. A trailing K ("$180K") is
+# thousands; _to_int expands it.
+NUMBER = r"(?:\d{1,3}(?:[.,]\d{3})+|\d+)(?:[kK]\b)?"
 UNIT_SUFFIX = r"(?:/\w+)?"  # optional e.g. /hr, /yr
 
 SALARY_RANGE_RE = re.compile(
@@ -140,7 +141,8 @@ def extract_salary_block_from_html(content_html: str) -> Optional[str]:
 
 
 def _to_int(number: str) -> int:
-    return int(re.sub(r"[.,]", "", number))
+    scale = 1000 if number[-1] in "kK" else 1
+    return int(re.sub(r"[.,kK]", "", number)) * scale
 
 
 def parse_salary_text(block: str) -> SalaryParseResult:
@@ -269,6 +271,23 @@ def parse_json_ld_job_posting(html_content: str) -> Optional[dict]:
                     break
 
     return result if (result.get("title") or result.get("salary_min")) else None
+
+
+def parse_ashby_app_data(html_content: Optional[str]) -> Optional[dict]:
+    """Return the `posting` from an Ashby page's window.__appData.
+
+    {} for a shell page (posting is null, e.g. an archived board index); None when the
+    page has no parsable __appData.
+    """
+    i = (html_content or "").find("window.__appData")
+    start = html_content.find("{", i) if i >= 0 else -1
+    if start < 0:
+        return None
+    try:
+        data, _ = _json.JSONDecoder().raw_decode(html_content[start:])
+    except ValueError:
+        return None
+    return (data.get("posting") or {}) if isinstance(data, dict) else None
 
 
 # ===========================================================================

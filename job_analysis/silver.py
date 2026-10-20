@@ -69,6 +69,34 @@ def _add_salary_from_html(record: dict, content_html: str) -> None:
         record["salary_text"] = parsed.salary_text or ""
 
 
+_ASHBY_INTERVALS = {"1 YEAR": "annual", "1 HOUR": "hourly", "1 MONTH": "monthly", "1 WEEK": "weekly"}
+
+
+def _add_salary_from_compensation(record: dict, compensation: dict | None) -> None:
+    """Ashby posting API (?includeCompensation=true) structured salary."""
+    if not compensation or record.get("salary_min"):
+        return
+    for component in compensation.get("summaryComponents") or []:
+        if component.get("compensationType") == "Salary" and component.get("minValue"):
+            record["salary_min"] = int(component["minValue"])
+            record["salary_max"] = int(component["maxValue"]) if component.get("maxValue") else None
+            record["currency"] = component.get("currencyCode") or ""
+            record["salary_unit"] = _ASHBY_INTERVALS.get(component.get("interval"), "")
+            record["salary_text"] = (compensation.get("scrapeableCompensationSalarySummary")
+                                     or compensation.get("compensationTierSummary") or "")
+            return
+
+
+def _add_salary_from_text(record: dict, text: str) -> None:
+    parsed = db.parse_salary_text(text)
+    if parsed.salary_min and not record.get("salary_min"):
+        record["salary_min"] = int(parsed.salary_min)
+        record["salary_max"] = int(parsed.salary_max) if parsed.salary_max else None
+        record["currency"] = parsed.currency or ""
+        record["salary_unit"] = parsed.salary_unit or ""
+        record["salary_text"] = parsed.salary_text or ""
+
+
 def merge_to_silver(job_id: str, page_rows: dict[str, Any]) -> dict | None:
     api = page_rows.get("api_board")
     app = page_rows.get("application")
@@ -95,6 +123,7 @@ def merge_to_silver(job_id: str, page_rows: dict[str, Any]) -> dict | None:
         record["location"] = _location_name(job.get("location"))
         record["url"] = job.get("jobUrl") or job.get("absolute_url", "")
         record["department_raw"] = _department_raw(job)
+        _add_salary_from_compensation(record, job.get("compensation"))
         content_html = job.get("content", "")
         if content_html:
             record["description_md"] = _md(content_html)
@@ -116,12 +145,26 @@ def merge_to_silver(job_id: str, page_rows: dict[str, Any]) -> dict | None:
         if not record.get("location"):
             record["location"] = jld.get("location", "")
 
-    if page:
+    posting = db.parse_ashby_app_data(page["content"]) if page else None
+    if posting:
+        # Archived Ashby pages: <title> is "Role @ Company"; __appData has the real fields.
+        record["title"] = record.get("title") or posting.get("title", "")
+        record["department_raw"] = record.get("department_raw") or posting.get("departmentName", "")
+        record["location"] = record.get("location") or posting.get("locationName", "")
+        description_html = posting.get("descriptionHtml") or ""
+        record["description_md"] = _md(description_html)
+        _add_salary_from_text(record, posting.get("compensationTierSummary") or "")
+        _add_salary_from_html(record, description_html)
+    elif page and posting is None:
         content = page["content"] or ""
         record["description_md"] = _md(content)
         _add_salary_from_html(record, content)
         if not record.get("title"):
             record["title"] = _title_from_html(content)
+    # posting == {}: an Ashby shell page (board index) says nothing about this job.
+
+    if not record.get("title"):
+        return None
 
     title = record.get("title", "")
     record["seniority"] = classify_seniority(title)

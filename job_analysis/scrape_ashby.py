@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 def scrape_all_jobs(company: str, *, copper_base_dir: str = db.COPPER_DIR) -> tuple[list[dict], str]:
-    url = f"https://api.ashbyhq.com/posting-api/job-board/{company}"
+    url = f"https://api.ashbyhq.com/posting-api/job-board/{company}?includeCompensation=true"
     log.info("Fetching all jobs from Ashby API for %s ...", company)
     resp = requests.get(url, timeout=30)
     resp.raise_for_status()
