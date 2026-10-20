@@ -89,7 +89,7 @@ Run a layer directly (useful when re-processing after a schema or classifier cha
 python -m job_analysis.bronze --board ashby --company pinecone
 python -m job_analysis.bronze --board greenhouse --company anthropic
 
-# Silver: classify bronze records → silver/jobs.db
+# Silver: classify bronze records → data/silver/jobs.db
 python -m job_analysis.silver --board ashby --company pinecone
 python -m job_analysis.silver --board greenhouse --company anthropic
 ```
