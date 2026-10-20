@@ -19,6 +19,12 @@ from typing import Optional
 
 from bs4 import BeautifulSoup
 
+# Layer DBs live under <repo>/data/, regardless of the caller's working directory.
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+COPPER_DIR = str(DATA_DIR / "copper")
+BRONZE_DIR = str(DATA_DIR / "bronze")
+SILVER_DIR = str(DATA_DIR / "silver")
+
 # ===========================================================================
 # 1. Salary parsing
 # ===========================================================================
@@ -283,7 +289,7 @@ CREATE INDEX IF NOT EXISTS idx_url ON snapshots(url);
 """
 
 
-def open_copper(board: str, base_dir: str = "copper") -> sqlite3.Connection:
+def open_copper(board: str, base_dir: str = COPPER_DIR) -> sqlite3.Connection:
     """Open (or create) the copper DB for a given board."""
     Path(base_dir).mkdir(parents=True, exist_ok=True)
     path = str(Path(base_dir) / f"{board}.db")
@@ -337,7 +343,7 @@ CREATE INDEX IF NOT EXISTS idx_company_job ON snapshots(company, job_id);
 """
 
 
-def open_bronze(board: str, base_dir: str = "bronze") -> sqlite3.Connection:
+def open_bronze(board: str, base_dir: str = BRONZE_DIR) -> sqlite3.Connection:
     """Open (or create) the bronze DB for a given board.
 
     board must be one of: ashby, greenhouse, adhoc.
@@ -426,7 +432,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 _REQUIRED = {"company", "board", "job_id", "source_date"}
 
 
-def open_silver(base_dir: str = "silver") -> sqlite3.Connection:
+def open_silver(base_dir: str = SILVER_DIR) -> sqlite3.Connection:
     """Open (or create) the silver jobs DB."""
     Path(base_dir).mkdir(parents=True, exist_ok=True)
     path = str(Path(base_dir) / "jobs.db")

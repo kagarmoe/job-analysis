@@ -12,8 +12,8 @@ from typing import Any
 
 import html2text
 
-import db
-from classify import (
+from job_analysis import db
+from job_analysis.classify import (
     classify_seniority,
     classify_work_mode,
     extract_yoe,
@@ -151,8 +151,8 @@ def process(
     board: str,
     company: str,
     *,
-    bronze_base_dir: str = "bronze",
-    silver_base_dir: str = "silver",
+    bronze_base_dir: str = db.BRONZE_DIR,
+    silver_base_dir: str = db.SILVER_DIR,
 ) -> dict[str, int]:
     """Process bronze rows into silver for one board/company."""
     bronze_conn = db.open_bronze(board, base_dir=bronze_base_dir)

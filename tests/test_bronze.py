@@ -1,7 +1,7 @@
 import json
 
-import db
-import bronze
+from job_analysis import db
+from job_analysis import bronze
 
 
 def test_derive_ashby_board_api_from_copper(tmp_path):

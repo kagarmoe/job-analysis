@@ -3,7 +3,7 @@
 Run the full job analysis pipeline from a single job posting URL.
 
 Usage:
-  python run_pipeline.py https://jobs.ashbyhq.com/Crusoe/2689707b-...
+  python -m job_analysis.run_pipeline https://jobs.ashbyhq.com/Crusoe/2689707b-...
 """
 
 from __future__ import annotations
@@ -11,11 +11,17 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
+
+from job_analysis import db
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+NOTEBOOK_DIR = REPO_ROOT / "notebooks"
 
 
 def parse_job_url(url: str) -> dict:
@@ -67,18 +73,18 @@ def scrape_adhoc(
     company: str,
     job_id: str,
     *,
-    copper_base_dir: str = "copper",
+    copper_base_dir: str = db.COPPER_DIR,
 ) -> None:
     """Fetch a single job page from an unknown board and store to copper/adhoc."""
-    import db as _db, requests
+    import requests
     from datetime import date
-    copper_db = _db.open_copper("adhoc", base_dir=copper_base_dir)
+    copper_db = db.open_copper("adhoc", base_dir=copper_base_dir)
     source_date = date.today().strftime("%Y%m%d")
     log.info("Fetching adhoc job: %s", url)
     resp = requests.get(url, timeout=30, headers={"User-Agent": "JobBoardResearch/1.0"})
     resp.raise_for_status()
-    _db.store_copper(copper_db, url=url, http_status=resp.status_code,
-                     content=resp.text, source_date=source_date)
+    db.store_copper(copper_db, url=url, http_status=resp.status_code,
+                    content=resp.text, source_date=source_date)
     log.info("Stored adhoc page to copper/adhoc.db")
 
 
@@ -87,15 +93,15 @@ def run_scraper(
     board: str,
     company: str,
     *,
-    copper_base_dir: str = "copper",
+    copper_base_dir: str = db.COPPER_DIR,
 ) -> None:
     """Run the appropriate scraper for the given board."""
     if board == "ashby":
-        import scrape_ashby
+        from job_analysis import scrape_ashby
 
         scrape_ashby.scrape_all_jobs(company, copper_base_dir=copper_base_dir)
     elif board == "greenhouse":
-        import scrape_greenhouse
+        from job_analysis import scrape_greenhouse
 
         scrape_greenhouse.scrape_all_jobs(company, copper_base_dir=copper_base_dir)
     else:
@@ -107,23 +113,23 @@ def run_wayback(
     board: str,
     company: str,
     *,
-    copper_base_dir: str = "copper",
+    copper_base_dir: str = db.COPPER_DIR,
 ) -> None:
     """Run wayback scraper to populate copper/bronze with historical snapshots."""
-    if copper_base_dir != "copper":
+    if copper_base_dir != db.COPPER_DIR:
         log.info("Skipping wayback for non-default copper base dir: %s", copper_base_dir)
         return
     log.info("Running wayback scraper for %s/%s...", board, company)
-    cmd = [sys.executable, "scrape_wayback.py", "--board", board, "--company", company]
+    cmd = [sys.executable, "-m", "job_analysis.scrape_wayback", "--board", board, "--company", company]
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, cwd=REPO_ROOT)
     except subprocess.CalledProcessError:
         log.warning("Wayback scraper failed — continuing without historical data")
 
 
 def inject_notebook_config(notebook_path: str, replacements: dict) -> str:
     """Inject config values into a notebook's first code cell via regex. Returns temp path."""
-    nb = json.loads(Path(notebook_path).read_text())
+    nb = json.loads((NOTEBOOK_DIR / notebook_path).read_text())
 
     for cell in nb["cells"]:
         if cell["cell_type"] == "code":
@@ -146,10 +152,10 @@ def inject_notebook_config(notebook_path: str, replacements: dict) -> str:
             cell["source"] = source
             break  # only modify first code cell
 
-    # Write to project dir so the kernel can find classify.py
-    tmp_path = f".pipeline_{Path(notebook_path).name}"
-    Path(tmp_path).write_text(json.dumps(nb, indent=1))
-    return tmp_path
+    # Beside the original, so the notebook runs with the same working directory.
+    tmp_path = NOTEBOOK_DIR / f".pipeline_{Path(notebook_path).name}"
+    tmp_path.write_text(json.dumps(nb, indent=1))
+    return str(tmp_path)
 
 
 def run_notebook(notebook_path: str, output_label: str) -> bool:
@@ -162,8 +168,10 @@ def run_notebook(notebook_path: str, output_label: str) -> bool:
         notebook_path,
         "--output", output_path,
     ]
+    # The kernel inherits this env, so `import job_analysis` works without an install.
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(REPO_ROOT), os.environ.get("PYTHONPATH")]))}
     try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600, env=env)
         log.info("  ✓ %s complete", output_label)
         return True
     except subprocess.CalledProcessError as e:
@@ -179,12 +187,10 @@ def get_summary(
     board: str,
     job_id: str,
     *,
-    silver_base_dir: str = "silver",
+    silver_base_dir: str = db.SILVER_DIR,
 ) -> dict | None:
-    import db as _db
-
     try:
-        conn = _db.open_silver(base_dir=silver_base_dir)
+        conn = db.open_silver(base_dir=silver_base_dir)
         target = conn.execute(
             "SELECT * FROM jobs WHERE company=? AND board=? AND job_id=?"
             " ORDER BY source_date DESC LIMIT 1",
@@ -229,15 +235,13 @@ def run_gold_notebooks(
     board: str,
     job_id: str,
     *,
-    silver_base_dir: str = "silver",
-    bronze_base_dir: str = "bronze",
+    silver_base_dir: str = db.SILVER_DIR,
+    bronze_base_dir: str = db.BRONZE_DIR,
 ) -> list[tuple[str, bool]]:
     nb_config = {"COMPANY": company, "BOARD": board}
     results: list[tuple[str, bool]] = []
 
-    import db as _db
-
-    silver_db = _db.open_silver(base_dir=silver_base_dir)
+    silver_db = db.open_silver(base_dir=silver_base_dir)
     has_salary = bool(silver_db.execute(
         "SELECT 1 FROM jobs WHERE company=? AND board=? AND has_salary=1 LIMIT 1",
         (company, board)
@@ -251,7 +255,7 @@ def run_gold_notebooks(
     tmp = inject_notebook_config("analyze_nlp.ipynb", nb_config)
     results.append(("NLP Analysis", run_notebook(tmp, "NLP Analysis")))
 
-    bronze_db = _db.open_bronze(board, base_dir=bronze_base_dir)
+    bronze_db = db.open_bronze(board, base_dir=bronze_base_dir)
     has_historical = bool(bronze_db.execute(
         "SELECT 1 FROM snapshots WHERE company=? LIMIT 1", (company,)
     ).fetchone())
@@ -270,12 +274,12 @@ def run_pipeline(
     url: str,
     *,
     run_notebooks: bool = False,
-    copper_base_dir: str = "copper",
-    bronze_base_dir: str = "bronze",
-    silver_base_dir: str = "silver",
+    copper_base_dir: str = db.COPPER_DIR,
+    bronze_base_dir: str = db.BRONZE_DIR,
+    silver_base_dir: str = db.SILVER_DIR,
 ) -> dict | None:
-    import bronze
-    import silver
+    from job_analysis import bronze
+    from job_analysis import silver
 
     info = parse_job_url(url)
     board, company, job_id = info["board"], info["company"], info["job_id"]
@@ -323,7 +327,7 @@ def run_pipeline(
         for name, ok in results:
             status = "✓" if ok else "✗"
             print(f"  {status} {name}")
-        for path in Path(".").glob(".pipeline_*.ipynb"):
+        for path in NOTEBOOK_DIR.glob(".pipeline_*.ipynb"):
             path.unlink()
         if not all(ok for _, ok in results):
             raise RuntimeError("Some notebooks failed")

@@ -1,6 +1,6 @@
 import sqlite3
 import pytest
-import db
+from job_analysis import db
 
 
 def test_open_copper_creates_schema(tmp_path):

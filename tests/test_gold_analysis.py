@@ -1,6 +1,6 @@
 import pandas as pd
 
-from gold_analysis import (
+from job_analysis.gold_analysis import (
     build_active_role_timeseries,
     build_active_closed_comparison,
     build_department_quarterly_salary_trends,
@@ -583,7 +583,7 @@ def test_build_skill_overlap_matrix_scores_roles_on_target_phrases():
 
 
 def test_latest_per_job_keeps_newest_snapshot_per_job():
-    from gold_analysis import latest_per_job
+    from job_analysis.gold_analysis import latest_per_job
 
     # silver is keyed on (company, board, job_id, source_date): one row per snapshot
     df = pd.DataFrame({
@@ -613,7 +613,7 @@ def test_build_historical_dataset_keeps_latest_snapshot_row():
 
 
 def test_coverage_label_reports_n_and_disclosure_rate():
-    from gold_analysis import coverage_label
+    from job_analysis.gold_analysis import coverage_label
 
     df_all = pd.DataFrame({"job_id": ["a", "b", "c", "d"]})
     df_salary = df_all.iloc[:1]
@@ -622,7 +622,7 @@ def test_coverage_label_reports_n_and_disclosure_rate():
 
 
 def test_build_relative_position_uses_same_seniority_peers_and_flags_thin_pools():
-    from gold_analysis import build_relative_position
+    from job_analysis.gold_analysis import build_relative_position
 
     df = pd.DataFrame({
         "job_id": ["tw", "a", "b", "c", "d", "e", "x"],
@@ -644,7 +644,7 @@ def test_build_relative_position_uses_same_seniority_peers_and_flags_thin_pools(
 
 
 def test_data_quality_summarises_coverage_and_snapshot_range():
-    from gold_analysis import data_quality
+    from job_analysis.gold_analysis import data_quality
 
     df = pd.DataFrame({
         "job_id": ["a", "b"],
