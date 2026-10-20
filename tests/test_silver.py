@@ -97,3 +97,46 @@ def test_process_rejects_unusable_bronze_group(tmp_path):
         "SELECT * FROM silver_rejected WHERE job_id='bad-job'"
     ).fetchone()
     assert rejected is not None
+
+
+def _bronze_row(page_type, content):
+    return {"company": "lancedb", "board": "ashby", "source_date": "20261020", "id": 1,
+            "fetched_at": "2026-10-20T00:00:00Z", "page_type": page_type, "content": content}
+
+
+def test_merge_reads_ashby_api_compensation():
+    job = {
+        "id": "j1", "title": "Documentation Engineer", "department": "Engineering",
+        "content": "<p>Write docs.</p>",
+        "compensation": {
+            "scrapeableCompensationSalarySummary": "$180K - $250K",
+            "summaryComponents": [
+                {"compensationType": "EquityPercentage", "interval": "NONE", "currencyCode": None,
+                 "minValue": None, "maxValue": None},
+                {"compensationType": "Salary", "interval": "1 YEAR", "currencyCode": "USD",
+                 "minValue": 180000, "maxValue": 250000},
+            ],
+        },
+    }
+    record = silver.merge_to_silver("j1", {"api_board": _bronze_row("api_board", json.dumps(job))})
+    assert (record["salary_min"], record["salary_max"], record["currency"], record["salary_unit"]) == (
+        180000, 250000, "USD", "annual")
+
+
+def test_merge_uses_ashby_app_data_for_archived_job_pages():
+    posting = {"title": "Documentation Engineer", "departmentName": "Engineering",
+               "locationName": "United States | Canada", "compensationTierSummary": "$180K – $250K",
+               "descriptionHtml": "<p>Write docs.</p>"}
+    page = ("<html><title>Documentation Engineer @ LanceDB</title><script>window.__appData = %s;</script></html>"
+            % json.dumps({"posting": posting}))
+    record = silver.merge_to_silver("j1", {"job_page": _bronze_row("job_page", page)})
+    assert record["title"] == "Documentation Engineer"
+    assert record["department"] == "Engineering"
+    assert record["location"] == "United States | Canada"
+    assert (record["salary_min"], record["salary_max"]) == (180000, 250000)
+
+
+def test_merge_rejects_ashby_shell_pages():
+    shell = '<html><title>Jobs</title><script>window.__appData = {"posting": null};</script></html>'
+    assert silver.merge_to_silver("j1", {"job_page": _bronze_row("job_page", shell)}) is None
+    assert silver.merge_to_silver("j1", {"application": _bronze_row("application", shell)}) is None

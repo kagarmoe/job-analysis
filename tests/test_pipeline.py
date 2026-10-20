@@ -112,3 +112,17 @@ def test_main_json_flag_prints_machine_readable_last_line(monkeypatch, capsys):
         "job": {"board": "ashby", "company": "acme", "job_id": "aaa-111"},
         "summary": summary,
     }
+
+
+def test_ashby_scraper_requests_compensation(tmp_path, monkeypatch):
+    from job_analysis import scrape_ashby
+
+    class Resp:
+        status_code, text = 200, '{"jobs": []}'
+        def raise_for_status(self): pass
+        def json(self): return {"jobs": []}
+
+    seen = []
+    monkeypatch.setattr(scrape_ashby.requests, "get", lambda url, **kw: seen.append(url) or Resp())
+    scrape_ashby.scrape_all_jobs("acme", copper_base_dir=str(tmp_path))
+    assert seen == ["https://api.ashbyhq.com/posting-api/job-board/acme?includeCompensation=true"]
