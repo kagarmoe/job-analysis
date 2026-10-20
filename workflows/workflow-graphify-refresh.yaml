@@ -1,0 +1,41 @@
+id: 7c664cb2-1b4e-419e-bd44-8bb51feeffeb
+name: graphify-refresh
+description: Rebuild the graphify knowledge graph (graphify-out/) - incremental extract, then name communities and write the report + HTML
+tags: {}
+vaults: [default]
+inputs:
+  properties:
+    deep:
+      type: boolean
+      default: false
+      description: Aggressive INFERRED-edge semantic extraction (more tokens)
+jobs:
+  - name: main
+    description: Extract then label
+    steps:
+      - name: extract
+        description: Incremental AST + semantic extraction into graphify-out/graph.json
+        task:
+          type: behavior
+          behavior: graphify
+          methodName: extract
+          inputs:
+            deep: ${{ inputs.deep }}
+        dependsOn: []
+        weight: 0
+        allowFailure: false
+      - name: label
+        description: Name communities, write GRAPH_REPORT.md and graph.html
+        task:
+          type: behavior
+          behavior: graphify
+          methodName: label
+        dependsOn:
+          - step: extract
+            condition:
+              type: succeeded
+        weight: 0
+        allowFailure: false
+    dependsOn: []
+    weight: 0
+version: 1

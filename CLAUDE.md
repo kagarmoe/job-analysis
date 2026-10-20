@@ -80,6 +80,7 @@ This scrapes the company's jobs, runs wayback historical (first time only), proc
 - `notebooks/analyze_historical.ipynb` — Historical hiring trends. Config: `COMPANY`, `BOARD`.
 - `notebooks/analyze_cross_company.ipynb` — For any role type (`TITLE_PATTERN` regex, e.g. `Technical Writer`, `Forward.Deployed`, `Instructional Design`): every matching salaried role at every scraped company, placed against same-seniority peers at its own company (median, IQR, percentile). Config: `TITLE_PATTERN`, optional `COMPANIES`.
 - `notebooks/analyze_role_gap.ipynb` — Role gap analysis: compare any job's salary vs. scope-matched comparables. Config: `COMPANY`, `BOARD`, `JOB_ID`.
+- `workflows/workflow-graphify-refresh.yaml` + `extensions/models/graphify.ts` — Rebuild the graphify knowledge graph in `graphify-out/`: `swamp workflow run graphify-refresh` (add `--input deep=true` for deep mode). Incremental `graphify extract` then `graphify label`; backend is the `graphify` behavior's `backend` global arg (default `gemini`, key from `vault.get(default, GEMINI_API_KEY)`; `claude-cli` needs no key). Use this instead of the `/graphify` skill's manual subagent pipeline.
 
 ## Current Status (2026-06-09)
 - Medallion architecture active: copper (raw HTTP) → bronze (schema derivation) → silver (classified, queryable) → gold (notebooks)
