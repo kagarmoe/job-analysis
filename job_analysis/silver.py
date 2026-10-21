@@ -227,7 +227,7 @@ def process(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Process bronze records into silver")
-    parser.add_argument("--board", required=True, choices=["ashby", "greenhouse", "adhoc"])
+    parser.add_argument("--board", required=True, choices=["ashby", "greenhouse", "workday", "adhoc"])
     parser.add_argument("--company", required=True)
     args = parser.parse_args()
 

@@ -37,6 +37,67 @@ def test_greenhouse_url():
     }
 
 
+def test_workday_url_with_and_without_locale():
+    for url in [
+        "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-HPC-Storage-Engineer_JR2014997",
+        "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Senior-HPC-Storage-Engineer_JR2014997?q=1",
+    ]:
+        assert parse_job_url(url) == {
+            "board": "workday",
+            "company": "nvidia",
+            "job_id": "JR2014997",
+            "host": "nvidia.wd5.myworkdayjobs.com",
+            "site": "NVIDIAExternalCareerSite",
+        }
+
+
+def test_workday_scraper_pages_each_job_category_then_fetches_details(tmp_path, monkeypatch):
+    from job_analysis import scrape_workday
+
+    base = "https://acme.wd1.myworkdayjobs.com/wday/cxs/acme/Careers"
+    facets = [{"facetParameter": "jobFamilyGroup", "values": [{"id": "eng", "descriptor": "Engineering"}]}]
+    # 21 engineering jobs: one full page of 20, then a page of 1.
+    paths = [f"/job/Remote/Role-{i}_R{i}" for i in range(21)]
+
+    class Resp:
+        status_code = 200
+        def __init__(self, payload): self.payload = payload; self.text = json.dumps(payload)
+        def raise_for_status(self): pass
+        def json(self): return self.payload
+
+    posts, gets = [], []
+    def post(url, json=None, **kw):
+        posts.append(json)
+        offset = json["offset"]
+        page = [] if not json["appliedFacets"] else paths[offset:offset + 20]
+        return Resp({"total": 21, "facets": facets, "jobPostings": [{"externalPath": p} for p in page]})
+    def get(url, **kw):
+        gets.append(url)
+        return Resp({"jobPostingInfo": {"title": url.rsplit("/", 1)[-1]}})
+
+    monkeypatch.setattr(scrape_workday.requests.Session, "post", lambda self, url, **kw: post(url, **kw))
+    monkeypatch.setattr(scrape_workday.requests.Session, "get", lambda self, url, **kw: get(url, **kw))
+    monkeypatch.setattr(scrape_workday, "DELAY_SECONDS", 0)
+
+    jobs, _ = scrape_workday.scrape_all_jobs("acme", host="acme.wd1.myworkdayjobs.com", site="Careers",
+                                             copper_base_dir=str(tmp_path))
+
+    assert [p["appliedFacets"] for p in posts] == [{}, {"jobFamilyGroup": ["eng"]}, {"jobFamilyGroup": ["eng"]}]
+    assert [p["offset"] for p in posts[1:]] == [0, 20]
+    assert sorted(gets) == sorted(base + p for p in paths)
+    assert len(jobs) == 21
+    copper = db.open_copper("workday", base_dir=str(tmp_path))
+    urls = [r["url"] for r in copper.execute("SELECT url FROM snapshots")]
+    assert f"{base}/jobs?jobFamilyGroup=eng&offset=20" in urls
+    assert len(urls) == 1 + 2 + 21  # facet probe, two list pages, details
+
+    # Same-day re-run resumes: details already in copper are not fetched again.
+    gets.clear()
+    scrape_workday.scrape_all_jobs("acme", host="acme.wd1.myworkdayjobs.com", site="Careers",
+                                   copper_base_dir=str(tmp_path))
+    assert gets == []
+
+
 def test_unknown_board_routes_to_adhoc():
     result = parse_job_url("https://linkedin.com/jobs/12345")
     assert result["board"] == "adhoc"
