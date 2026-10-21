@@ -118,6 +118,7 @@ jupyter notebook notebooks/analyze_salaries.ipynb
 jupyter notebook notebooks/analyze_nlp.ipynb
 jupyter notebook notebooks/analyze_historical.ipynb
 jupyter notebook notebooks/analyze_role_gap.ipynb
+jupyter notebook notebooks/analyze_cross_company.ipynb
 ```
 
 Each notebook has a config cell at the top with `COMPANY`, `BOARD` (and `JOB_ID` for role gap). Set these before running.

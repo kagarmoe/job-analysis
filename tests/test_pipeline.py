@@ -1,5 +1,7 @@
 """Tests for run_pipeline URL parsing."""
 import json
+import sys
+from pathlib import Path
 
 from job_analysis import db
 from job_analysis.run_pipeline import parse_job_url
@@ -108,6 +110,26 @@ def test_main_json_flag_prints_machine_readable_last_line(monkeypatch, capsys):
         "job": {"board": "ashby", "company": "acme", "job_id": "aaa-111"},
         "summary": summary,
     }
+
+
+def test_gold_notebooks_run_on_this_python_against_the_callers_silver(tmp_path, monkeypatch):
+    # Regression: kernels read the default data/ even when given another silver dir, and
+    # `jupyter` came from PATH (on macOS 27 possibly the broken system Python 3.10).
+    calls = []
+    monkeypatch.setattr(run_pipeline.subprocess, "run", lambda cmd, **kw: calls.append((cmd, kw["env"])))
+    try:
+        run_pipeline.run_gold_notebooks(
+            "acme", "ashby", "j1",
+            silver_base_dir=str(tmp_path / "silver"), bronze_base_dir=str(tmp_path / "bronze"),
+        )
+    finally:
+        for path in run_pipeline.NOTEBOOK_DIR.glob(".pipeline_*.ipynb"):
+            path.unlink()
+
+    assert calls
+    for cmd, env in calls:
+        assert cmd[:3] == [sys.executable, "-m", "jupyter"]
+        assert Path(env["JOB_ANALYSIS_DATA_DIR"]).resolve() == tmp_path.resolve()
 
 
 def test_ashby_scraper_requests_compensation(tmp_path, monkeypatch):
