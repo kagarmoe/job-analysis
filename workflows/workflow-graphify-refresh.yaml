@@ -9,6 +9,10 @@ inputs:
       type: boolean
       default: false
       description: Aggressive INFERRED-edge semantic extraction (more tokens)
+    force:
+      type: boolean
+      default: false
+      description: Full rebuild (graphify --force); needed when the graph legitimately shrinks and the shrink guard refuses to overwrite
     tokenBudget:
       type: integer
       default: 60000
@@ -25,6 +29,7 @@ jobs:
           methodName: extract
           inputs:
             deep: ${{ inputs.deep }}
+            force: ${{ inputs.force }}
             tokenBudget: ${{ inputs.tokenBudget }}
         dependsOn: []
         weight: 0

@@ -25,6 +25,9 @@ const ExtractArgsSchema = z.object({
   deep: z.boolean().default(false).describe(
     "Aggressive INFERRED-edge semantic extraction (--mode deep)",
   ),
+  force: z.boolean().default(false).describe(
+    "Full re-scan and re-dispatch, skipping the incremental gate and semantic cache (--force); graphify's documented way to rebuild when the graph legitimately shrinks",
+  ),
   tokenBudget: z.number().int().positive().default(60000).describe(
     "Per-chunk token cap for the semantic pass (--token-budget); lower it when the model omits files from a large chunk",
   ),
@@ -132,6 +135,7 @@ export const model = {
           "--token-budget", String(args.tokenBudget),
         ];
         if (args.deep) cmd.push("--mode", "deep");
+        if (args.force) cmd.push("--force");
         await runGraphify(cmd, context);
 
         const out = `${context.repoDir}/graphify-out`;
