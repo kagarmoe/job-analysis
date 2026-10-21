@@ -32,18 +32,23 @@ Python 3.10 does not work on macOS 27: its newest scipy (1.15.3) ships Fortran b
 macOS 27 loader rejects, which breaks scikit-learn and the gold NLP analysis. scipy 1.16+
 needs Python 3.11+.
 
+Dependencies are declared in `pyproject.toml`: core in `dependencies`, the notebook stack
+(Jupyter, matplotlib, seaborn, wordcloud) in the `notebooks` extra, pytest in the `dev`
+dependency group. `requirements.txt` is the pinned lock of all three.
+
 ```bash
 python3.14 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-pip install -e .   # makes `job_analysis` importable from notebooks/
+pip install -r requirements.txt   # pinned: core + notebooks + dev
+pip install --no-deps -e .        # makes `job_analysis` importable from notebooks/
 ```
 
-If you want to run notebooks via `--run-notebooks`, also install Jupyter and register the
-`job-analysis` kernel (every notebook declares it; re-run this after rebuilding `.venv`):
+Unpinned instead: `pip install -e .` (pipeline only), `pip install -e ".[notebooks]"`,
+`pip install --group dev`.
+
+Every notebook declares the `job-analysis` kernel; register it (again after rebuilding `.venv`):
 
 ```bash
-pip install jupyter ipykernel nbconvert
 python -m ipykernel install --user --name job-analysis --display-name "Python 3.14 (job-analysis)"
 ```
 
