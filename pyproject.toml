@@ -2,12 +2,35 @@
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-# Pinned dependencies live in requirements.txt; this file only makes the
-# package importable (`pip install -e .`) from notebooks and other cwd's.
+# Direct dependencies only; requirements.txt is the pinned lock generated from
+# this file (see its header for the regenerate command).
 [project]
 name = "job-analysis"
 version = "0.1.0"
 requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4",
+    "html2text",
+    "numpy",
+    "pandas",
+    "requests",
+    "scikit-learn",
+    "urllib3",
+]
+
+[project.optional-dependencies]
+# Gold analysis notebooks and `run_pipeline --run-notebooks`.
+notebooks = [
+    "ipykernel",
+    "matplotlib",
+    "nbconvert",
+    "notebook",
+    "seaborn",
+    "wordcloud",
+]
+
+[dependency-groups]
+dev = ["pytest"]
 
 [tool.setuptools]
 packages = ["job_analysis"]
