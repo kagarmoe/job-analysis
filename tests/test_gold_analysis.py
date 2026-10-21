@@ -17,7 +17,6 @@ from job_analysis.gold_analysis import (
     build_time_to_fill_dataset,
     extract_skill_phrases,
     split_locations,
-    summarize_yoe_by_department,
     summarize_recurring_roles,
 )
 

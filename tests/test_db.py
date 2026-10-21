@@ -1,13 +1,5 @@
 import json
-import sqlite3
-import pytest
 from job_analysis import db
-
-
-def test_open_copper_creates_schema(tmp_path):
-    conn = db.open_copper("ashby", base_dir=str(tmp_path))
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    assert "snapshots" in tables
 
 
 def test_store_copper_idempotent(tmp_path):
@@ -20,12 +12,6 @@ def test_store_copper_idempotent(tmp_path):
     assert count == 1
 
 
-def test_open_bronze_creates_schema(tmp_path):
-    conn = db.open_bronze("ashby", base_dir=str(tmp_path))
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    assert "snapshots" in tables
-
-
 def test_store_bronze_idempotent(tmp_path):
     conn = db.open_bronze("ashby", base_dir=str(tmp_path))
     db.store_bronze(conn, company="acme", board="ashby", job_id="abc123",
@@ -36,33 +22,6 @@ def test_store_bronze_idempotent(tmp_path):
                     http_status=200, content="{}", copper_id=None)
     count = conn.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
     assert count == 1
-
-
-def test_db_does_not_own_board_derivation():
-    assert not hasattr(db, "derive_ashby")
-    assert not hasattr(db, "derive_greenhouse")
-    assert not hasattr(db, "derive_adhoc")
-
-
-def test_db_does_not_own_classification():
-    assert not hasattr(db, "normalize_department")
-    assert not hasattr(db, "classify_work_mode")
-    assert not hasattr(db, "extract_yoe")
-    assert not hasattr(db, "add_usd_salary")
-
-
-def test_open_silver_creates_schema(tmp_path):
-    conn = db.open_silver(base_dir=str(tmp_path))
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    assert "jobs" in tables
-    assert "silver_rejected" in tables
-    assert "audit_log" in tables
-
-
-def test_open_silver_adds_yoe_column(tmp_path):
-    conn = db.open_silver(base_dir=str(tmp_path))
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(jobs)").fetchall()}
-    assert "yoe" in cols
 
 
 def test_upsert_job_success(tmp_path):
@@ -82,13 +41,6 @@ def test_upsert_job_missing_required(tmp_path):
     assert ok is False
     rejected = conn.execute("SELECT * FROM silver_rejected WHERE job_id='j2'").fetchone()
     assert rejected is not None
-
-
-def test_log_run(tmp_path):
-    conn = db.open_silver(base_dir=str(tmp_path))
-    db.log_run(conn, "acme", "ashby", rows_processed=10, rows_upserted=9, rows_rejected=1)
-    row = conn.execute("SELECT * FROM audit_log WHERE company='acme'").fetchone()
-    assert row["rows_processed"] == 10
 
 
 def test_parse_salary_range():

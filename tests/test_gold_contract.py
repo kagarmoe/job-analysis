@@ -1,7 +1,13 @@
 import json
+from pathlib import Path
+
+import nbformat
+import pytest
+from nbclient import NotebookClient
 
 from job_analysis import bronze
 from job_analysis import db
+from job_analysis import run_pipeline
 from job_analysis import silver
 
 
@@ -51,10 +57,10 @@ def _run_layers(board, company, tmp_path):
     }
 
 
-def _description(skill="Python", yoe="5+ years"):
+def _description(skill="Python", yoe="5+ years", salary="$120,000 - $180,000"):
     return f"""
     <section>
-      <p>Annual Salary Range: $120,000 - $180,000 USD annually</p>
+      <p>Annual Salary Range: {salary} USD annually</p>
       <p>Build services from scratch and own the roadmap.</p>
       <p>Requires {yoe} of experience with {skill}, Kubernetes, and SQL.</p>
       <ul>
@@ -65,14 +71,15 @@ def _description(skill="Python", yoe="5+ years"):
     """
 
 
-def _ashby_job(job_id, title, department="Software", location="Remote - US", yoe="5+ years"):
+def _ashby_job(job_id, title, department="Software", location="Remote - US", yoe="5+ years",
+               skill="Python", salary="$120,000 - $180,000"):
     return {
         "id": job_id,
         "title": title,
         "department": department,
         "location": location,
         "jobUrl": f"https://jobs.ashbyhq.com/acme/{job_id}",
-        "content": _description(yoe=yoe),
+        "content": _description(skill=skill, yoe=yoe, salary=salary),
     }
 
 
@@ -104,9 +111,9 @@ def test_gold_salary_contract_for_ashby_and_greenhouse(tmp_path):
     )
     greenhouse_layers = _run_layers("greenhouse", "acme", tmp_path / "greenhouse")
 
-    for conn, job_id in [
-        (ashby_layers["silver"], "ashby-1"),
-        (greenhouse_layers["silver"], "12345"),
+    for conn, job_id, seniority, work_mode, location in [
+        (ashby_layers["silver"], "ashby-1", "Senior", "Remote-Friendly", "Remote - US"),
+        (greenhouse_layers["silver"], "12345", "Staff / Principal", "Office-Only", "New York, NY"),
     ]:
         row = conn.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
         assert row["salary_min"] == 120000
@@ -114,10 +121,10 @@ def test_gold_salary_contract_for_ashby_and_greenhouse(tmp_path):
         assert row["currency"] == "USD"
         assert row["salary_unit"] == "annual"
         assert row["has_salary"] == 1
-        assert row["department"]
-        assert row["seniority"]
-        assert row["work_mode"]
-        assert row["location"]
+        assert row["department"] == "Engineering"
+        assert row["seniority"] == seniority
+        assert row["work_mode"] == work_mode
+        assert row["location"] == location
 
 
 def test_gold_nlp_contract_populates_description_and_yoe_from_api_content(tmp_path):
@@ -166,43 +173,6 @@ def test_gold_historical_contract_preserves_multiple_source_dates(tmp_path):
     ]
 
 
-def test_gold_role_gap_contract_has_target_and_comparables(tmp_path):
-    jobs = [
-        _ashby_job("target-1", "Senior Software Engineer", yoe="5+ years"),
-        _ashby_job("comp-1", "Senior Backend Engineer", yoe="5+ years"),
-        _ashby_job("comp-2", "Staff Software Engineer", yoe="7+ years"),
-        _ashby_job("comp-3", "Engineering Manager", yoe="8+ years"),
-        _ashby_job("fallback-1", "Senior Product Manager", department="Product", yoe="5+ years"),
-    ]
-    _store_ashby_board(tmp_path / "copper", "acme", "20260101", jobs)
-    layers = _run_layers("ashby", "acme", tmp_path)
-
-    rows = layers["silver"].execute(
-        "SELECT * FROM jobs WHERE company='acme' AND board='ashby'"
-    ).fetchall()
-    target = [row for row in rows if row["job_id"] == "target-1"][0]
-    same_department = [
-        row for row in rows
-        if row["job_id"] != "target-1" and row["department"] == target["department"]
-    ]
-    fallback = [
-        row for row in rows
-        if row["job_id"] != "target-1" and row["department"] != target["department"]
-    ]
-
-    assert target["salary_min"] is not None
-    assert target["salary_max"] is not None
-    assert target["description_md"]
-    assert target["department"]
-    assert same_department
-    assert fallback
-    for row in same_department + fallback:
-        assert isinstance(row["job_id"], str)
-        assert row["description_md"]
-        assert row["salary_min"] is not None
-        assert row["salary_max"] is not None
-
-
 def test_gold_cross_layer_trace_contract(tmp_path):
     _store_ashby_board(
         tmp_path / "copper",
@@ -227,3 +197,61 @@ def test_gold_cross_layer_trace_contract(tmp_path):
     ).fetchone()
 
     assert "trace-1" in copper_row["content"]
+
+
+ACME = {"COMPANY": "acme", "BOARD": "ashby"}
+
+
+# expected_jobs: rows the notebook reports after loading. acme has 8 distinct jobs over
+# 14 snapshot rows, so 8 proves snapshot-level notebooks dedupe to the latest per job.
+@pytest.mark.parametrize("notebook, config, expected_jobs", [
+    pytest.param("analyze_salaries.ipynb", ACME, 8, id="salaries"),
+    pytest.param("analyze_nlp.ipynb", ACME, 8, id="nlp"),
+    pytest.param("analyze_historical.ipynb", ACME, 14, id="historical"),
+    pytest.param("analyze_role_gap.ipynb", {**ACME, "JOB_ID": "tw-1"}, 8, id="role_gap"),
+    pytest.param("analyze_role_gap.ipynb", {"COMPANY": "nopay", "BOARD": "ashby", "JOB_ID": "np-1"}, 2,
+                 id="role_gap_no_salary"),
+    pytest.param("analyze_cross_company.ipynb", {}, 8, id="cross_company"),
+])
+def test_gold_notebook_executes_on_etl_output(notebook, config, expected_jobs, tmp_path, monkeypatch):
+    # Two snapshots: old-1 closes, new-1 opens; the TW role feeds role-gap and cross-company.
+    first = [
+        _ashby_job("tw-1", "Senior Technical Writer", skill="Markdown", salary="$140,000 - $170,000"),
+        _ashby_job("eng-1", "Senior Software Engineer", skill="Python", salary="$160,000 - $210,000"),
+        _ashby_job("eng-2", "Senior Backend Engineer", skill="Go", salary="$150,000 - $200,000"),
+        _ashby_job("eng-3", "Staff Software Engineer", skill="Rust", yoe="8+ years", salary="$200,000 - $260,000"),
+        _ashby_job("pm-1", "Senior Product Manager", department="Product and Design", skill="Roadmaps"),
+        _ashby_job("mkt-1", "Marketing Manager", department="Marketing", location="New York, NY", skill="SEO"),
+        _ashby_job("old-1", "Software Engineer", skill="Java", yoe="2+ years", salary="$110,000 - $140,000"),
+    ]
+    second = first[:-1] + [_ashby_job("new-1", "Senior Data Engineer", skill="Spark", salary="$155,000 - $205,000")]
+    _store_ashby_board(tmp_path / "copper", "acme", "20010115", first)
+    _store_ashby_board(tmp_path / "copper", "acme", "20010415", second)
+    _run_layers("ashby", "acme", tmp_path)
+    # A board that discloses no pay at all (common on Greenhouse).
+    nopay = [_ashby_job("np-1", "Senior Technical Writer", salary=""), _ashby_job("np-2", "Software Engineer", salary="")]
+    _store_ashby_board(tmp_path / "copper", "nopay", "20010115", nopay)
+    _store_ashby_board(tmp_path / "copper", "nopay", "20010415", nopay)
+    _run_layers("ashby", "nopay", tmp_path)
+
+    # The kernel is a fresh process: it finds the fixture DBs and the package via env.
+    monkeypatch.setenv("JOB_ANALYSIS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("PYTHONPATH", str(run_pipeline.REPO_ROOT))
+    monkeypatch.setenv("MPLBACKEND", "Agg")
+    injected = Path(run_pipeline.inject_notebook_config(notebook, config))
+    try:
+        nb = nbformat.read(injected, as_version=4)
+    finally:
+        injected.unlink()
+
+    NotebookClient(
+        nb, kernel_name="python3", timeout=180,
+        resources={"metadata": {"path": str(run_pipeline.NOTEBOOK_DIR)}},
+    ).execute()  # raises CellExecutionError on any failing cell
+
+    printed = "".join(
+        o.get("text", "") for c in nb.cells if c.cell_type == "code" for o in c.get("outputs", [])
+    )
+    # 2001 snapshots prove it read the fixture, not whatever is in the real data/ directory.
+    assert f"DATA QUALITY: {expected_jobs} jobs" in printed
+    assert "snapshots 2001-" in printed

@@ -10,6 +10,7 @@ Sections:
 
 import html
 import json as _json
+import os
 import re
 import sqlite3
 from dataclasses import dataclass
@@ -20,7 +21,8 @@ from typing import Optional
 from bs4 import BeautifulSoup
 
 # Layer DBs live under <repo>/data/, regardless of the caller's working directory.
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+# JOB_ANALYSIS_DATA_DIR overrides it (tests point notebook kernels at fixture DBs).
+DATA_DIR = Path(os.environ.get("JOB_ANALYSIS_DATA_DIR") or Path(__file__).resolve().parent.parent / "data")
 COPPER_DIR = str(DATA_DIR / "copper")
 BRONZE_DIR = str(DATA_DIR / "bronze")
 SILVER_DIR = str(DATA_DIR / "silver")
