@@ -2,8 +2,6 @@
 import json
 
 from job_analysis import db
-from job_analysis import bronze
-from job_analysis import silver
 from job_analysis.run_pipeline import parse_job_url
 from job_analysis import run_pipeline
 
@@ -76,8 +74,6 @@ def test_pipeline_smoke_runs_without_jupyter_or_network(tmp_path, monkeypatch):
 
     monkeypatch.setattr(run_pipeline, "run_scraper", fake_run_scraper)
     monkeypatch.setattr(run_pipeline, "run_wayback", lambda *args, **kwargs: None)
-    monkeypatch.setattr(bronze, "derive", bronze.derive)
-    monkeypatch.setattr(silver, "process", silver.process)
 
     summary = run_pipeline.run_pipeline(
         "https://jobs.ashbyhq.com/acme/aaa-111",

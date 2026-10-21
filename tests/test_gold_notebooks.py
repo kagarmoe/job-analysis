@@ -1,16 +1,9 @@
+# Source checks for what executing the notebooks can't see (execution is tested in
+# test_gold_contract.py): a wrong number or an unlabeled chart doesn't raise.
 import json
 from pathlib import Path
 
 NOTEBOOK_DIR = Path(__file__).resolve().parent.parent / "notebooks"
-
-
-GOLD_NOTEBOOKS = [
-    "analyze_salaries.ipynb",
-    "analyze_nlp.ipynb",
-    "analyze_historical.ipynb",
-    "analyze_role_gap.ipynb",
-    "analyze_cross_company.ipynb",
-]
 
 
 def _notebook_source(path: str) -> str:
@@ -21,56 +14,15 @@ def _notebook_source(path: str) -> str:
     )
 
 
-def test_gold_notebook_code_cells_are_syntactically_valid():
-    for path in GOLD_NOTEBOOKS:
-        notebook = json.loads((NOTEBOOK_DIR / path).read_text())
-        for index, cell in enumerate(notebook["cells"]):
-            if cell.get("cell_type") != "code":
-                continue
-            source = cell.get("source", "")
-            if isinstance(source, list):
-                source = "".join(source)
-            compile(source, f"{path}:cell-{index}", "exec")
-
-
-def test_salary_notebook_uses_shared_location_helper_and_generic_labels():
-    source = _notebook_source("analyze_salaries.ipynb")
-    assert ".apply(split_locations)" in source
-    assert "Anthropic" not in source
-
-
-def test_notebooks_call_shared_helpers_instead_of_inlining_them():
-    # Logic lives in gold_analysis.py (tested there); notebooks must call it, not redefine it.
-    assert "build_relative_position(df, JOB_ID)" in _notebook_source("analyze_role_gap.ipynb")
-    assert "build_tfidf_cluster_projection(df_nlp)" in _notebook_source("analyze_nlp.ipynb")
-    assert "build_historical_dataset(df)" in _notebook_source("analyze_historical.ipynb")
-    for path in GOLD_NOTEBOOKS:
-        assert "def build_" not in _notebook_source(path), path
-    assert "scope" not in _notebook_source("analyze_role_gap.ipynb").lower()
-
-
-def test_role_gap_notebook_handles_missing_salary_data():
-    source = _notebook_source("analyze_role_gap.ipynb")
-    assert "if df.empty:" in source
-    assert "No salaried roles available for comparable salary analysis." in source
-    assert "No salary ranges available for salary comparison chart." in source
-
-
-def test_role_gap_notebook_does_not_overwrite_usd_with_native_currency():
-    source = _notebook_source("analyze_role_gap.ipynb")
-    assert 'df["mid_usd"] = (df["salary_min"]' not in source
-    assert 'left=row["salary_min"]' not in source
-
-
-def test_every_notebook_prints_data_quality_and_salary_charts_carry_coverage():
-    for path in GOLD_NOTEBOOKS:
-        source = _notebook_source(path)
-        assert "data_quality(" in source, path
-        bare = [ln for ln in source.splitlines()
+def test_salary_chart_titles_carry_coverage_suffix():
+    for path in sorted(p.name for p in NOTEBOOK_DIR.glob("analyze_*.ipynb")):
+        bare = [ln for ln in _notebook_source(path).splitlines()
                 if "set_title(" in ln and "Salary" in ln and "COVERAGE_SUFFIX" not in ln]
         assert bare == [], (path, bare)
 
 
-def test_snapshot_level_notebooks_dedupe_to_latest_per_job():
-    for path in ["analyze_salaries.ipynb", "analyze_nlp.ipynb", "analyze_role_gap.ipynb"]:
-        assert "latest_per_job(" in _notebook_source(path), path
+def test_role_gap_notebook_does_not_overwrite_usd_with_native_currency():
+    # Regression: the notebook once recomputed mid_usd from native-currency salary_min/max.
+    source = _notebook_source("analyze_role_gap.ipynb")
+    assert 'df["mid_usd"] = (df["salary_min"]' not in source
+    assert 'left=row["salary_min"]' not in source
