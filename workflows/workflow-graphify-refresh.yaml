@@ -16,7 +16,7 @@ inputs:
     allowPartial:
       type: boolean
       default: false
-      description: Write even when rewritten docs yield fewer nodes than before (graphify --allow-partial)
+      description: Overwrite graph.json even when the new graph is smaller than the existing one (graphify --allow-partial)
     tokenBudget:
       type: integer
       default: 60000

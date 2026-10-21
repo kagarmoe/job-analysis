@@ -29,7 +29,7 @@ const ExtractArgsSchema = z.object({
     "Full re-scan and re-dispatch, skipping the incremental gate and semantic cache (--force); graphify's documented way to rebuild when the graph legitimately shrinks",
   ),
   allowPartial: z.boolean().default(false).describe(
-    "Write even when a doc now yields fewer nodes than before (--allow-partial); for rewritten docs that trip the unverified-shrink guard",
+    "Overwrite graph.json even when the new graph is smaller than the existing one (--allow-partial)",
   ),
   tokenBudget: z.number().int().positive().default(60000).describe(
     "Per-chunk token cap for the semantic pass (--token-budget); lower it when the model omits files from a large chunk",
