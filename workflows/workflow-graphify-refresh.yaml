@@ -9,6 +9,14 @@ inputs:
       type: boolean
       default: false
       description: Aggressive INFERRED-edge semantic extraction (more tokens)
+    force:
+      type: boolean
+      default: false
+      description: Full rebuild (graphify --force); needed when the graph legitimately shrinks and the shrink guard refuses to overwrite
+    allowPartial:
+      type: boolean
+      default: false
+      description: Overwrite graph.json even when the new graph is smaller than the existing one (graphify --allow-partial)
     tokenBudget:
       type: integer
       default: 60000
@@ -25,6 +33,8 @@ jobs:
           methodName: extract
           inputs:
             deep: ${{ inputs.deep }}
+            force: ${{ inputs.force }}
+            allowPartial: ${{ inputs.allowPartial }}
             tokenBudget: ${{ inputs.tokenBudget }}
         dependsOn: []
         weight: 0
