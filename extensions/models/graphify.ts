@@ -25,6 +25,9 @@ const ExtractArgsSchema = z.object({
   deep: z.boolean().default(false).describe(
     "Aggressive INFERRED-edge semantic extraction (--mode deep)",
   ),
+  tokenBudget: z.number().int().positive().default(60000).describe(
+    "Per-chunk token cap for the semantic pass (--token-budget); lower it when the model omits files from a large chunk",
+  ),
 });
 
 type ExtractArgs = z.infer<typeof ExtractArgsSchema>;
@@ -124,7 +127,10 @@ export const model = {
         args: ExtractArgs,
         context: Context,
       ): Promise<{ dataHandles: { name: string }[] }> => {
-        const cmd = ["extract", ".", "--backend", context.globalArgs.backend];
+        const cmd = [
+          "extract", ".", "--backend", context.globalArgs.backend,
+          "--token-budget", String(args.tokenBudget),
+        ];
         if (args.deep) cmd.push("--mode", "deep");
         await runGraphify(cmd, context);
 
