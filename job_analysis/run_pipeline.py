@@ -50,6 +50,12 @@ def parse_job_url(url: str) -> dict:
                 "job_id": m.group(2),
             }
 
+    if host.endswith(".myworkdayjobs.com"):
+        from job_analysis.scrape_workday import parse_workday_url
+        wd = parse_workday_url(url)
+        if wd and wd["job_id"]:
+            return {"board": "workday", **wd}
+
     # Unknown board — route to adhoc
     parts = path.strip("/").split("/")
     job_id = parts[-1] if parts else path.replace("/", "-")
@@ -293,6 +299,11 @@ def run_pipeline(
 
     if board == "adhoc":
         scrape_adhoc(url, company, job_id, copper_base_dir=copper_base_dir)
+    elif board == "workday":
+        from job_analysis import scrape_workday
+        # No wayback: the archive doesn't capture Workday's POST-only list API.
+        scrape_workday.scrape_all_jobs(company, host=info["host"], site=info["site"],
+                                       copper_base_dir=copper_base_dir)
     else:
         run_scraper(board, company, copper_base_dir=copper_base_dir)
         run_wayback(board, company, copper_base_dir=copper_base_dir)
@@ -343,7 +354,7 @@ def run_pipeline(
 
 def main():
     ap = argparse.ArgumentParser(description="Run the full job analysis pipeline")
-    ap.add_argument("url", help="Job posting URL (Ashby or Greenhouse)")
+    ap.add_argument("url", help="Job posting URL (Ashby, Greenhouse or Workday)")
     ap.add_argument(
         "--run-notebooks",
         action="store_true",
