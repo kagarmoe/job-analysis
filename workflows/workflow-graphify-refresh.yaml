@@ -13,6 +13,10 @@ inputs:
       type: boolean
       default: false
       description: Full rebuild (graphify --force); needed when the graph legitimately shrinks and the shrink guard refuses to overwrite
+    allowPartial:
+      type: boolean
+      default: false
+      description: Write even when rewritten docs yield fewer nodes than before (graphify --allow-partial)
     tokenBudget:
       type: integer
       default: 60000
@@ -30,6 +34,7 @@ jobs:
           inputs:
             deep: ${{ inputs.deep }}
             force: ${{ inputs.force }}
+            allowPartial: ${{ inputs.allowPartial }}
             tokenBudget: ${{ inputs.tokenBudget }}
         dependsOn: []
         weight: 0
