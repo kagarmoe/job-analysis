@@ -70,6 +70,7 @@ This scrapes the company's jobs, runs wayback historical (first time only), proc
 - `job_analysis/run_pipeline.py` — Single-command pipeline orchestrator. Parses job URL, scrapes, runs bronze/silver Python ETL, then prints a summary. Optional `--run-notebooks` executes gold notebooks.
 - `job_analysis/db.py` — Storage utilities: open/store/upsert/log functions for SQLite layers, plus salary parsing helpers.
 - `job_analysis/classify.py` — Source of truth for classification functions (department, seniority, work mode, extract_yoe, USD conversion). Gold notebooks import helpers from here.
+- `job_analysis/gold_analysis.py` — Gold-layer helpers the notebooks call (dedupe to latest snapshot, same-seniority peer comparison, TF-IDF clustering, historical/time-to-fill frames, `data_quality` header).
 - `job_analysis/bronze.py` — Copper → bronze ETL. Derives board-specific structured records from raw copper snapshots.
 - `job_analysis/silver.py` — Bronze → silver ETL. Merges page types, classifies jobs, validates rows, writes rejects, and logs runs.
 - `job_analysis/scrape_greenhouse.py` — Live scraper for Greenhouse job boards. Usage: `python -m job_analysis.scrape_greenhouse --company anthropic`. Writes raw responses to `data/copper/greenhouse.db` only.
@@ -82,7 +83,7 @@ This scrapes the company's jobs, runs wayback historical (first time only), proc
 - `notebooks/analyze_role_gap.ipynb` — Role gap analysis: compare any job's salary vs. same-seniority peers at its company (median, IQR, percentile). Config: `COMPANY`, `BOARD`, `JOB_ID`.
 - `workflows/workflow-graphify-refresh.yaml` + `extensions/models/graphify.ts` — Rebuild the graphify knowledge graph in `graphify-out/`: `swamp workflow run graphify-refresh` (add `--input deep=true` for deep mode). Incremental `graphify extract` then `graphify label`; backend is the `graphify` behavior's `backend` global arg (default `gemini`, key from `vault.get(default, GEMINI_API_KEY)`; `claude-cli` needs no key). Use this instead of the `/graphify` skill's manual subagent pipeline.
 
-## Current Status (2026-06-09)
+## Current Status (2026-10-20)
 - Medallion architecture active: copper (raw HTTP) → bronze (schema derivation) → silver (classified, queryable) → gold (notebooks)
 - Pipeline runs from a single command: `python -m job_analysis.run_pipeline <url>`
 - Core pipeline does not require Jupyter; notebooks are optional gold analysis only
@@ -91,7 +92,8 @@ This scrapes the company's jobs, runs wayback historical (first time only), proc
 - Supports Greenhouse and Ashby job boards
 - Gold notebooks are configurable via injected `COMPANY`/`BOARD` variables (and `JOB_ID` for role gap)
 - Department classifier uses Anthropic's 16 departments (regex on titles) + normalized 11-bucket taxonomy for cross-company analysis
-- `python -m pytest -q` includes a no-network app smoke test; passing tests should mean the core app runs
+- `python -m pytest -q` (run in CI on every PR and push to main) includes a no-network pipeline smoke test and executes every gold notebook against fixture data built by the real ETL; passing tests should mean the app and notebooks run
+- `JOB_ANALYSIS_DATA_DIR` overrides the `data/` root (tests use it to point notebook kernels at fixture DBs)
 
 ## TODO — Future Data Sources
 - Research Google BigQuery public datasets for job posting data

@@ -158,18 +158,24 @@ def inject_notebook_config(notebook_path: str, replacements: dict) -> str:
     return str(tmp_path)
 
 
-def run_notebook(notebook_path: str, output_label: str) -> bool:
+def run_notebook(notebook_path: str, output_label: str, silver_base_dir: str = db.SILVER_DIR) -> bool:
     """Execute a notebook. Returns True on success."""
     log.info("Running %s ...", output_label)
     output_path = f"/tmp/pipeline_out_{Path(notebook_path).stem}.ipynb"
+    # This interpreter's jupyter, not whichever is first on PATH.
     cmd = [
-        "jupyter", "nbconvert", "--to", "notebook", "--execute",
+        sys.executable, "-m", "jupyter", "nbconvert", "--to", "notebook", "--execute",
         f"--ExecutePreprocessor.kernel_name={KERNEL_NAME}",
         notebook_path,
         "--output", output_path,
     ]
-    # The kernel inherits this env, so `import job_analysis` works without an install.
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(REPO_ROOT), os.environ.get("PYTHONPATH")]))}
+    # The kernel inherits this env: `import job_analysis` works without an install, and
+    # notebooks (which only open silver) read the same silver DB the pipeline wrote.
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(filter(None, [str(REPO_ROOT), os.environ.get("PYTHONPATH")])),
+        "JOB_ANALYSIS_DATA_DIR": str(Path(silver_base_dir).resolve().parent),
+    }
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600, env=env)
         log.info("  ✓ %s complete", output_label)
@@ -248,12 +254,12 @@ def run_gold_notebooks(
     ).fetchone())
     if has_salary:
         tmp = inject_notebook_config("analyze_salaries.ipynb", nb_config)
-        results.append(("Salary Analysis", run_notebook(tmp, "Salary Analysis")))
+        results.append(("Salary Analysis", run_notebook(tmp, "Salary Analysis", silver_base_dir)))
     else:
         log.info("Skipping salary analysis (no salary data found)")
 
     tmp = inject_notebook_config("analyze_nlp.ipynb", nb_config)
-    results.append(("NLP Analysis", run_notebook(tmp, "NLP Analysis")))
+    results.append(("NLP Analysis", run_notebook(tmp, "NLP Analysis", silver_base_dir)))
 
     bronze_db = db.open_bronze(board, base_dir=bronze_base_dir)
     has_historical = bool(bronze_db.execute(
@@ -261,12 +267,12 @@ def run_gold_notebooks(
     ).fetchone())
     if has_historical:
         tmp = inject_notebook_config("analyze_historical.ipynb", nb_config)
-        results.append(("Historical Analysis", run_notebook(tmp, "Historical Analysis")))
+        results.append(("Historical Analysis", run_notebook(tmp, "Historical Analysis", silver_base_dir)))
     else:
         log.info("Skipping historical analysis (no data)")
 
     tmp = inject_notebook_config("analyze_role_gap.ipynb", {**nb_config, "JOB_ID": job_id})
-    results.append(("Role Gap Analysis", run_notebook(tmp, "Role Gap Analysis")))
+    results.append(("Role Gap Analysis", run_notebook(tmp, "Role Gap Analysis", silver_base_dir)))
     return results
 
 

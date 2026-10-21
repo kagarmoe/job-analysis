@@ -14,7 +14,6 @@ Strategy (optimized to minimize requests):
 
 import argparse
 import html as _html
-import json
 import logging
 import re
 import time
