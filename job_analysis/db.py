@@ -181,8 +181,8 @@ def parse_salary_text(block: str) -> SalaryParseResult:
             min_val, max_val = max_val, min_val
         return SalaryParseResult(block, currency, min_val, max_val, unit)
 
-    # secondary pattern: "131,040–165,000 USD"
-    m2 = re.search(rf"({NUMBER})\s*{DASH_PATTERN}\s*({NUMBER})\s*(USD|EUR|GBP|CAD|AUD)?",
+    # secondary pattern: "131,040–165,000 USD", "184,000 USD - 287,500 USD" (Workday)
+    m2 = re.search(rf"({NUMBER})\s*(?:USD|EUR|GBP|CAD|AUD)?\s*{DASH_PATTERN}\s*({NUMBER})\s*(USD|EUR|GBP|CAD|AUD)?",
                    block)
     if m2:
         min_val = _to_int(m2.group(1))

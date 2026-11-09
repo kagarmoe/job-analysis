@@ -54,7 +54,7 @@ directly). Every `swamp model …` spelling remains supported.
 # Job Analysis Project
 
 ## Project Overview
-Analyzing job postings scraped from multiple job boards (Greenhouse, Ashby).
+Analyzing job postings scraped from multiple job boards (Greenhouse, Ashby, Workday).
 
 ## Usage
 ```bash
@@ -75,6 +75,7 @@ This scrapes the company's jobs, runs wayback historical (first time only), proc
 - `job_analysis/silver.py` — Bronze → silver ETL. Merges page types, classifies jobs, validates rows, writes rejects, and logs runs.
 - `job_analysis/scrape_greenhouse.py` — Live scraper for Greenhouse job boards. Usage: `python -m job_analysis.scrape_greenhouse --company anthropic`. Writes raw responses to `data/copper/greenhouse.db` only.
 - `job_analysis/scrape_ashby.py` — Live scraper for Ashby-hosted job boards. Usage: `python -m job_analysis.scrape_ashby --company crusoe`. Writes raw responses to `data/copper/ashby.db` only.
+- `job_analysis/scrape_workday.py` — Live scraper for Workday boards (`*.myworkdayjobs.com`). Usage: `python -m job_analysis.scrape_workday --url <board or job URL>`. Writes raw responses to `data/copper/workday.db` only.
 - `job_analysis/scrape_wayback.py` — Historical scraper via Wayback Machine CDX API. Usage: `python -m job_analysis.scrape_wayback --board greenhouse --company anthropic`. Writes raw snapshots to `data/copper/{board}.db` only.
 - `notebooks/analyze_salaries.ipynb` — Current salary analysis. Config: `COMPANY`, `BOARD`.
 - `notebooks/analyze_nlp.ipynb` — NLP & text analysis on job descriptions (requires sklearn + wordcloud). Config: `COMPANY`, `BOARD`.
@@ -91,7 +92,7 @@ This scrapes the company's jobs, runs wayback historical (first time only), proc
 - Core pipeline does not require Jupyter; notebooks are optional gold analysis only
 - Scrapers are fetch-only: all write to `data/copper/{board}.db`, no CSV output
 - `data/silver/jobs.db` is the query layer for all analysis notebooks; includes `yoe INTEGER` column
-- Supports Greenhouse and Ashby job boards
+- Supports Greenhouse, Ashby and Workday job boards (Workday has no Wayback history)
 - Gold notebooks are configurable via injected `COMPANY`/`BOARD` variables (and `JOB_ID` for role gap)
 - Department classifier uses Anthropic's 16 departments (regex on titles) + normalized 11-bucket taxonomy for cross-company analysis
 - `python -m pytest -q` (run in CI on every PR and push to main) includes a no-network pipeline smoke test and executes every gold notebook against fixture data built by the real ETL; passing tests should mean the app and notebooks run
@@ -107,5 +108,6 @@ This scrapes the company's jobs, runs wayback historical (first time only), proc
 - Department rules: ordered regex patterns, most-specific-first, in `job_analysis/classify.py`
 - Normalized departments: 11 common buckets (Research, Manufacturing, Engineering, Product & Design, People, Finance & Legal, Sales & BD, Marketing & Comms, Public Policy, Security & IT, Operations & Other)
 - Ashby API: `https://api.ashbyhq.com/posting-api/job-board/{company}` — returns JSON with department/team as structured fields
+- Workday API: `POST https://{tenant}.wdN.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs` (20 per page; facets only on offset 0) + `GET .../{site}{externalPath}` per job. Details have no department, so bronze takes it from the `jobFamilyGroup` (Job Category) list query each job appeared in
 - Word clouds: use `generate_from_frequencies()` with pre-filtered words to ensure stopword removal
 - Wayback Machine: 2.5s delay between fetches, 5 retries with 5s backoff

@@ -23,6 +23,8 @@ _ASHBY_INDIVIDUAL_JOB_RE = re.compile(
     r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
 )
 _GH_API_RE = re.compile(r"boards-api\.greenhouse\.io/v1/boards/([^/]+)/jobs")
+_WD_LIST_RE = re.compile(r"/jobs\?(?:jobFamilyGroup=([^&]+)&)?offset=")
+_WD_DETAIL_RE = re.compile(r"/wday/cxs/[^/]+/[^/]+(/job/[^?]+)$")
 
 
 def derive_ashby(
@@ -155,6 +157,72 @@ def derive_greenhouse(
     return count
 
 
+def derive_workday(
+    copper_conn: sqlite3.Connection,
+    bronze_conn: sqlite3.Connection,
+    company: str,
+) -> int:
+    """Derive per-job bronze records from Workday detail snapshots, in the fields silver reads."""
+    rows = copper_conn.execute(
+        "SELECT id, url, content, source_date FROM snapshots WHERE url LIKE ? ORDER BY id DESC",
+        (f"%myworkdayjobs.com/wday/cxs/{company}/%",),
+    ).fetchall()
+
+    # Details carry no department; the job-category list page a job appeared on does.
+    # Category names come only on offset-0 pages, so collect them across all pages.
+    names: dict[str, str] = {}
+    category_id: dict[str, str] = {}
+    for row in rows:
+        m = _WD_LIST_RE.search(row["url"])
+        if not m:
+            continue
+        try:
+            page = json.loads(row["content"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        for f in page.get("facets") or []:
+            if f.get("facetParameter") == "jobFamilyGroup":
+                for v in f.get("values", []):
+                    names.setdefault(v["id"], v.get("descriptor", ""))
+        if m.group(1):
+            for posting in page.get("jobPostings", []):
+                category_id.setdefault(posting.get("externalPath", ""), m.group(1))
+    category = {path: names.get(cid, "") for path, cid in category_id.items()}
+
+    count = 0
+    for row in rows:
+        m = _WD_DETAIL_RE.search(row["url"])
+        if not m:
+            continue
+        try:
+            info = json.loads(row["content"] or "{}").get("jobPostingInfo") or {}
+        except json.JSONDecodeError:
+            continue
+        job_id = info.get("jobReqId") or m.group(1).rsplit("_", 1)[-1]
+        locations = [info.get("location")] + (info.get("additionalLocations") or [])
+        job = {
+            **info,
+            "location": " | ".join(loc for loc in locations if loc),
+            "jobUrl": info.get("externalUrl", ""),
+            "content": info.get("jobDescription", ""),
+            "department": category.get(m.group(1), ""),
+        }
+        db.store_bronze(
+            bronze_conn,
+            company=company,
+            board="workday",
+            job_id=job_id,
+            page_type="api_board",
+            source_date=row["source_date"],
+            original_url=row["url"],
+            http_status=200,
+            content=json.dumps(job),
+            copper_id=row["id"],
+        )
+        count += 1
+    return count
+
+
 def derive_adhoc(
     copper_conn: sqlite3.Connection,
     bronze_conn: sqlite3.Connection,
@@ -210,6 +278,8 @@ def derive(
         return derive_ashby(copper_conn, bronze_conn, company)
     if board == "greenhouse":
         return derive_greenhouse(copper_conn, bronze_conn, company)
+    if board == "workday":
+        return derive_workday(copper_conn, bronze_conn, company)
     if board == "adhoc":
         if not job_id:
             raise ValueError("job_id is required for adhoc bronze derivation")
@@ -220,7 +290,7 @@ def derive(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Derive bronze records from copper")
-    parser.add_argument("--board", required=True, choices=["ashby", "greenhouse", "adhoc"])
+    parser.add_argument("--board", required=True, choices=["ashby", "greenhouse", "workday", "adhoc"])
     parser.add_argument("--company", required=True)
     parser.add_argument("--job-id", default=None)
     args = parser.parse_args()

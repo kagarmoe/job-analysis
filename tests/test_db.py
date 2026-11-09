@@ -98,6 +98,12 @@ def test_parse_salary_text_expands_k_suffix():
     assert (result.salary_min, result.salary_max, result.currency) == (180000, 250000, "USD")
 
 
+def test_parse_salary_text_currency_code_after_each_amount():
+    # Workday postings (NVIDIA); previously found the currency but no amounts
+    result = db.parse_salary_text("The base salary range is 184,000 USD - 287,500 USD for Level 4.")
+    assert (result.salary_min, result.salary_max, result.currency) == (184000, 287500, "USD")
+
+
 def test_parse_ashby_app_data_tells_posting_shell_and_other_pages_apart():
     posting = {"title": "Documentation Engineer", "departmentName": "Engineering"}
     page = '<script>window.__appData = {"posting": %s, "x": 1};</script>' % json.dumps(posting)

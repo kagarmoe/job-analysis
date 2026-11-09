@@ -1,6 +1,6 @@
 # Job Analysis
 
-Analyze job postings from any company to evaluate salary fairness relative to peer roles. Scrapes current and historical job data from Greenhouse and Ashby job boards, then processes it through local SQLite layers.
+Analyze job postings from any company to evaluate salary fairness relative to peer roles. Scrapes current and historical job data from Greenhouse, Ashby and Workday job boards, then processes it through local SQLite layers.
 
 ## Quick Start
 
@@ -58,6 +58,7 @@ python -m ipykernel install --user --name job-analysis --display-name "Python 3.
 |---|---|---|
 | Ashby | `jobs.ashbyhq.com/<company>/<job_id>` | `jobs.ashbyhq.com/Pinecone/abc-123` |
 | Greenhouse | `job-boards.greenhouse.io/<company>/jobs/<job_id>` | `job-boards.greenhouse.io/anthropic/jobs/456789` |
+| Workday | `<tenant>.wdN.myworkdayjobs.com/[en-US/]<site>/job/<location>/<title>_<req_id>` | `adobe.wd5.myworkdayjobs.com/en-US/external_experienced/job/San-Jose/Director_R172776` |
 
 Many companies embed Ashby or Greenhouse on their own domain (`careers.company.com`). Use the underlying board URL for best results — check the job listing page source or look for `ashbyhq.com` / `greenhouse.io` in network requests.
 
@@ -71,6 +72,7 @@ Scrapers write raw HTTP responses to `data/copper/` only — no transformation, 
 # Scrape all current open jobs for a company
 python -m job_analysis.scrape_ashby --company <company>
 python -m job_analysis.scrape_greenhouse --company <company>
+python -m job_analysis.scrape_workday --url <any board or job URL on myworkdayjobs.com>
 
 # Examples
 python -m job_analysis.scrape_ashby --company pinecone
@@ -178,6 +180,7 @@ An earlier description-based "scope score" was validated on 562 Anthropic salari
 - `job_analysis/silver.py` — Bronze → silver ETL. Merges page types, classifies jobs, validates rows, writes rejects, and logs runs.
 - `job_analysis/scrape_ashby.py` — Live Ashby scraper. Writes to `data/copper/ashby.db`.
 - `job_analysis/scrape_greenhouse.py` — Live Greenhouse scraper. Writes to `data/copper/greenhouse.db`.
+- `job_analysis/scrape_workday.py` — Live Workday scraper (one list query per job category, then one detail request per job). Writes to `data/copper/workday.db`. No Wayback history: the list API is POST-only.
 - `job_analysis/scrape_wayback.py` — Wayback Machine historical scraper. Writes to `data/copper/{board}.db`.
 - `tests/` — pytest suite, including a no-network app smoke test for the core pipeline.
 
