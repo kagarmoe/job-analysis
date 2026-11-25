@@ -11,7 +11,6 @@ __pycache__/
 # Layer DBs (copper/bronze/silver); only the hand-labeled seed set is tracked.
 data/*
 !data/seed_labels.json
-graphify-out/
 classify.txt
 vaults/
 # BEGIN swamp managed section - DO NOT EDIT
